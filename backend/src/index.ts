@@ -1,8 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import http from 'http';
 import { initializeDatabase } from './database/db';
 import { apiRouter } from './api';
+import { setupWebSocket } from './websockets/logs';
 
 dotenv.config();
 
@@ -14,11 +16,14 @@ app.use(express.json());
 
 app.use('/api', apiRouter);
 
+const server = http.createServer(app);
+setupWebSocket(server);
+
 async function startServer() {
     try {
         await initializeDatabase();
         
-        app.listen(PORT, () => {
+        server.listen(PORT, () => {
             console.log(`AerosPanel Backend listening on port ${PORT}`);
         });
     } catch (error) {
