@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { Terminal, Server, FolderGit2, Settings, Power } from 'lucide-react';
 
 interface LayoutProps {

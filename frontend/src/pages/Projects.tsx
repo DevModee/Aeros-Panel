@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Terminal as TerminalIcon, Play, Square, RotateCw, Plus, Power } from 'lucide-react';
 
 interface Project {

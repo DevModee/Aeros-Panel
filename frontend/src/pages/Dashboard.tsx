@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ProgressBar } from '../components/ProgressBar';
-import { Activity, Cpu, HardDrive, Battery, Thermometer } from 'lucide-react';
+import { Activity, Cpu, HardDrive, Thermometer } from 'lucide-react';
 
 interface SystemMetrics {
     cpu: { usage: number; cores: number };
