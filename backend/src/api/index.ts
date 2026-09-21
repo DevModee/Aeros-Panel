@@ -101,6 +101,16 @@ apiRouter.post('/projects/:id/env', async (req, res) => {
         if (!project) return res.status(404).json({ error: 'Not found' });
         
         await db('projects').where('id', req.params.id).update({ env_vars });
+        
+        // Escribir el archivo físico en el servidor
+        const fs = require('fs');
+        const path = require('path');
+        const projectDir = `/opt/${project.service_name}`;
+        
+        if (fs.existsSync(projectDir)) {
+            fs.writeFileSync(path.join(projectDir, '.env'), env_vars || '');
+        }
+        
         res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
