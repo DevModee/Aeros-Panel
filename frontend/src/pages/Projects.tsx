@@ -112,6 +112,30 @@ export function Projects() {
         }
     };
 
+    const handleNewProject = async () => {
+        const url = prompt('Ingresa la URL de clonación de Github (ej: git@github.com:User/Repo.git):');
+        if (!url) return;
+        const name = prompt('Ingresa un nombre para el proyecto (ej: Mi Bot):');
+        if (!name) return;
+        
+        // Derivar el service_name de la url de github (ej: Repo-Name)
+        const parts = url.split('/');
+        let serviceName = parts[parts.length - 1].replace('.git', '');
+        serviceName = serviceName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
+
+        try {
+            await fetch(`http://${window.location.hostname}:3000/api/projects`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, service_name: serviceName, repository: url })
+            });
+            fetchProjects();
+        } catch (error) {
+            console.error(error);
+            alert('Error al crear proyecto');
+        }
+    };
+
     return (
         <div className="max-w-6xl mx-auto flex flex-col h-full">
             <header className="mb-6 flex justify-between items-end">
@@ -119,7 +143,7 @@ export function Projects() {
                     <h2 className="text-3xl font-bold text-aeros-blue tracking-widest mb-2">ACTIVE_PROJECTS</h2>
                     <p className="text-gray-400 font-mono">Manage deployments and systemd services.</p>
                 </div>
-                <button className="btn btn-primary text-aeros-blue border-aeros-blue flex items-center bg-transparent hover:bg-aeros-blue hover:text-aeros-dark cursor-pointer">
+                <button onClick={handleNewProject} className="btn btn-primary text-aeros-blue border-aeros-blue flex items-center bg-transparent hover:bg-aeros-blue hover:text-aeros-dark cursor-pointer">
                     <Plus size={16} className="mr-2" />
                     NEW_PROJECT
                 </button>

@@ -116,3 +116,21 @@ apiRouter.post('/projects/:id/env', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+apiRouter.post('/projects', async (req, res) => {
+    try {
+        const { name, service_name, repository } = req.body;
+        
+        await db('projects').insert({
+            name,
+            service_name,
+            repository,
+            branch: 'main',
+            autostart: 0
+        });
+
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
