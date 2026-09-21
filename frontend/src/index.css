@@ -1,14 +1,55 @@
 @import "tailwindcss";
 
 @theme {
-  --color-cyan-500: #00ffff;
-  --color-neon-green: #39ff14;
-  --color-panel-bg: #0a0a0a;
-  --color-panel-border: #333333;
+  --color-aeros-blue: #00a8ff;
+  --color-aeros-purple: #7a31ff;
+  --color-aeros-dark: #000000;
+  --color-aeros-gray: #1a1a1a;
+  --color-aeros-text: #e5e5e5;
+}
+
+:root {
+  --global-bg: #000000;
+  --global-font-color: #e5e5e5;
+  --global-font-size: 14px;
+  --global-line-height: 1.5;
+  --global-space: 10px;
+  --font-stack: "JetBrains Mono", "Fira Code", monospace;
+  --background-color: #000000;
+  --page-width: 100%;
+  --font-color: #e5e5e5;
+  --invert-font-color: #000000;
+  --secondary-color: #1a1a1a;
+  --tertiary-color: #333333;
+  --primary-color: #00a8ff;
+  --error-color: #ff3333;
+  --progress-bar-background: #1a1a1a;
+  --progress-bar-fill: #7a31ff;
+  --code-bg-color: #0a0a0a;
+  --input-style: solid;
+  --display-h1-decoration: none;
 }
 
 body {
-  background-color: #000000;
-  color: #e5e5e5;
-  font-family: "JetBrains Mono", "Fira Code", monospace;
+  background-color: var(--global-bg);
+  color: var(--global-font-color);
+  font-family: var(--font-stack);
+  margin: 0;
+  padding: 0;
 }
+
+/* Custom terminal scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #000000; 
+}
+::-webkit-scrollbar-thumb {
+  background: #333333; 
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #7a31ff; 
+}
+

@@ -1,16 +1,22 @@
 # AerosPanel
 
-A highly optimized, ultra-lightweight server management panel designed specifically for low-resource Linux environments (such as Intel Celeron laptops or 4GB RAM devices). 
+A zero-overhead, hyper-optimized control panel designed specifically for managing Debian-based Discord bots and system services on low-resource hardware.
 
 Unlike heavy alternatives like Coolify or Pterodactyl that rely on Docker and complex proxies, AerosPanel interfaces directly with native Linux tools to keep the hardware footprint at absolute zero when idle.
 
-## Features
+## 🔥 Features
+- **Zero Configuration**: No complex setup. Drop the backend into your server and run.
+- **Hardware Telemetry**: Native reads from Linux `/sys/class/` sensors for zero-overhead metrics.
+- **Systemd Integration**: Wraps `systemctl` to manage bots/services at the OS level.
+- **Terminal Streaming**: Streams standard output directly to your browser via WebSockets.
+- **.env Editor**: Edit project environment variables directly from the panel.
+- **Autostart Control**: Toggle whether specific services should start automatically on boot.
+- **Ultra-lightweight**: Compiles down to a minimal footprint, serving static files without requiring a heavy dev server.
 
-- **Zero Docker Requirement**: Manages your bots and web apps directly via native `systemd` services.
-- **Hardware Telemetry**: Reads native Linux paths (`/sys/class/...`) to monitor CPU, RAM, Disk Space, temperatures, and laptop battery status in real-time.
-- **Live Terminal**: Streams `journalctl` directly to your browser over WebSockets for instant debugging.
-- **Terminal UI**: A strict, lightweight, cyberpunk-inspired visual interface built with Tailwind CSS.
-- **Tailscale Ready**: Designed to work in a headless decoupled architecture (Frontend on Vercel, Backend local) secured by Tailscale Funnel without exposing ports.
+## 🛠️ Tech Stack
+- **Frontend**: React 19, TypeScript, Vite, TailwindCSS v4, Terminal.css, Lucide React.
+- **Backend**: Node.js, Express, TypeScript, SQLite3 (Knex), `ssh2`, native `systemctl` bindings.
+- **Deployment**: Custom automated SSH scripts, PM2/Systemd integration.
 
 ## Architecture
 

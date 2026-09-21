@@ -93,3 +93,16 @@ apiRouter.post('/projects/:id/autostart', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+apiRouter.post('/projects/:id/env', async (req, res) => {
+    try {
+        const { env_vars } = req.body;
+        const project = await db('projects').where('id', req.params.id).first();
+        if (!project) return res.status(404).json({ error: 'Not found' });
+        
+        await db('projects').where('id', req.params.id).update({ env_vars });
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
