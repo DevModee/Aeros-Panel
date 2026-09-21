@@ -1,5 +1,4 @@
-
-import { Terminal, Server, FolderGit2, Settings, Power } from 'lucide-react';
+import { Terminal, Server, FolderGit2, Power } from 'lucide-react';
 
 interface LayoutProps {
     children: React.ReactNode;
