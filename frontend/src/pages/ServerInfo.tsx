@@ -28,12 +28,12 @@ export function ServerInfo() {
             </header>
 
             <div className="grid grid-cols-2 gap-6">
-                <div className="terminal-card border-aeros-gray p-6 bg-[#050505]">
-                    <div className="text-aeros-blue flex items-center mb-6 pl-4 font-bold text-lg">
+                <div className="terminal-card border-aeros-gray !p-8 bg-[#050505]">
+                    <div className="text-aeros-blue flex items-center mb-6 font-bold text-lg">
                         <Server className="mr-4 text-aeros-blue" size={22} />
                         OS_INFO
                     </div>
-                    <div className="space-y-3 text-sm text-gray-300 px-4">
+                    <div className="space-y-3 text-sm text-gray-300">
                         <div className="flex justify-between border-b border-aeros-gray pb-2"><span className="text-gray-500">HOSTNAME</span><span>{info?.hostname || 'AEROS_HOST'}</span></div>
                         <div className="flex justify-between border-b border-aeros-gray pb-2"><span className="text-gray-500">OS</span><span>{info?.os || 'Debian GNU/Linux 12'}</span></div>
                         <div className="flex justify-between border-b border-aeros-gray pb-2"><span className="text-gray-500">KERNEL</span><span>{info?.kernel || 'Linux'}</span></div>
@@ -41,12 +41,12 @@ export function ServerInfo() {
                     </div>
                 </div>
 
-                <div className="terminal-card border-aeros-gray p-6 bg-[#050505]">
-                    <div className="text-aeros-blue flex items-center mb-6 pl-4 font-bold text-lg">
+                <div className="terminal-card border-aeros-gray !p-8 bg-[#050505]">
+                    <div className="text-aeros-blue flex items-center mb-6 font-bold text-lg">
                         <Cpu className="mr-4 text-aeros-blue" size={22} />
                         HARDWARE
                     </div>
-                    <div className="space-y-3 text-sm text-gray-300 px-4">
+                    <div className="space-y-3 text-sm text-gray-300">
                         <div className="flex justify-between border-b border-aeros-gray pb-2"><span className="text-gray-500">CPU</span><span className="truncate ml-4">{info?.cpu || 'Intel Celeron'}</span></div>
                         <div className="flex justify-between border-b border-aeros-gray pb-2"><span className="text-gray-500">CORES</span><span>{info?.cores || 2} Threads</span></div>
                         <div className="flex justify-between border-b border-aeros-gray pb-2"><span className="text-gray-500">MEMORY</span><span>{info ? Math.round(info.memory/1024/1024) : 4096} MB</span></div>
@@ -54,12 +54,12 @@ export function ServerInfo() {
                     </div>
                 </div>
                 
-                <div className="terminal-card border-aeros-gray p-6 bg-[#050505]">
-                    <div className="text-aeros-blue flex items-center mb-6 pl-4 font-bold text-lg">
+                <div className="terminal-card border-aeros-gray !p-8 bg-[#050505]">
+                    <div className="text-aeros-blue flex items-center mb-6 font-bold text-lg">
                         <Network className="mr-4 text-aeros-blue" size={22} />
                         NETWORK
                     </div>
-                    <div className="space-y-3 text-sm text-gray-300 px-4">
+                    <div className="space-y-3 text-sm text-gray-300">
                         <div className="flex justify-between items-center border-b border-aeros-gray pb-2">
                             <span className="text-gray-500">IPV4_LOCAL</span>
                             <div className="flex items-center gap-2">
@@ -75,12 +75,12 @@ export function ServerInfo() {
                     </div>
                 </div>
 
-                <div className="terminal-card border-aeros-gray p-6 bg-[#050505]">
-                    <div className="text-aeros-blue flex items-center mb-6 pl-4 font-bold text-lg">
+                <div className="terminal-card border-aeros-gray !p-8 bg-[#050505]">
+                    <div className="text-aeros-blue flex items-center mb-6 font-bold text-lg">
                         <Shield className="mr-4 text-aeros-blue" size={22} />
                         SECURITY
                     </div>
-                    <div className="space-y-3 text-sm text-gray-300 px-4">
+                    <div className="space-y-3 text-sm text-gray-300">
                         <div className="flex justify-between border-b border-aeros-gray pb-2"><span className="text-gray-500">SSH_STATUS</span><span className="text-green-500">SECURE</span></div>
                         <div className="flex justify-between border-b border-aeros-gray pb-2"><span className="text-gray-500">ROOT_LOGIN</span><span className="text-red-500">ENABLED</span></div>
                         <div className="flex justify-between border-b border-aeros-gray pb-2"><span className="text-gray-500">FAIL2BAN</span><span className="text-yellow-500">DISABLED</span></div>
