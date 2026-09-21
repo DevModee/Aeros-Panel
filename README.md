@@ -5,7 +5,9 @@ A zero-overhead, hyper-optimized control panel designed specifically for managin
 ## Screenshots
 
 ![Dashboard](docs/dashboard.png)
-![Projects](docs/projects.png)
+![Projects List](docs/projects-list.png)
+![Terminal](docs/projects-terminal.png)
+![Server Info](docs/server-info.png)
 
 Unlike heavy alternatives like Coolify or Pterodactyl that rely on Docker and complex proxies, AerosPanel interfaces directly with native Linux tools to keep the hardware footprint at absolute zero when idle.
 
