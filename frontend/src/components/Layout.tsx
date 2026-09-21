@@ -25,13 +25,13 @@ export function Layout({ children, currentPath, onNavigate }: LayoutProps) {
                         <p className="text-xs text-aeros-purple mt-1">v1.0.0 // ONLINE</p>
                     </div>
                 </div>
-                <nav className="flex-1 p-4 space-y-2 terminal-menu">
-                    <ul className="list-none p-0 m-0">
+                <nav className="flex-1 p-4 space-y-2">
+                    <ul className="list-none p-0 m-0 flex flex-col gap-2">
                         {navItems.map((item) => (
                             <li key={item.id} className="m-0">
                                 <button
                                     onClick={() => onNavigate(item.id)}
-                                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-none transition-colors text-left border-0 cursor-pointer
+                                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-none transition-colors text-left border-0 cursor-pointer font-mono
                                         ${currentPath === item.id 
                                             ? 'bg-aeros-gray text-aeros-blue border-l-2 border-aeros-purple' 
                                             : 'bg-transparent text-aeros-text hover:bg-aeros-gray hover:text-white border-l-2 border-transparent'
