@@ -2,6 +2,11 @@
 
 A zero-overhead, hyper-optimized control panel designed specifically for managing Debian-based Discord bots and system services on low-resource hardware.
 
+## Screenshots
+
+![Dashboard](docs/dashboard.png)
+![Projects](docs/projects.png)
+
 Unlike heavy alternatives like Coolify or Pterodactyl that rely on Docker and complex proxies, AerosPanel interfaces directly with native Linux tools to keep the hardware footprint at absolute zero when idle.
 
 ## 🔥 Features

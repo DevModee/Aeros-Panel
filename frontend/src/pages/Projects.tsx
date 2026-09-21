@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Terminal as TerminalIcon, Play, Square, RotateCw, Plus, Power, FileText, Save, X } from 'lucide-react';
+import { Terminal as TerminalIcon, Play, Square, RotateCw, Plus, Power, FileText, Save, X, Trash2 } from 'lucide-react';
 
 interface Project {
     id: number;
@@ -186,6 +186,14 @@ export function Projects() {
                                 </span>
                                 {!isEditingEnv ? (
                                     <div className="flex gap-2">
+                                        <button 
+                                            onClick={() => setLogs([])}
+                                            className="btn btn-default py-1 px-2 text-xs flex items-center bg-transparent border-aeros-gray hover:border-error-color hover:text-error-color cursor-pointer text-gray-500"
+                                            title="Clear Terminal"
+                                        >
+                                            <Trash2 size={14} className="mr-2" />
+                                            CLEAR
+                                        </button>
                                         <button 
                                             onClick={openEnvEditor} 
                                             className="btn btn-default py-1 px-2 text-xs flex items-center bg-transparent border-aeros-gray hover:border-aeros-blue hover:text-aeros-blue cursor-pointer"
