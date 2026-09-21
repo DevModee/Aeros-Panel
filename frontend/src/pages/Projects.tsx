@@ -143,7 +143,7 @@ export function Projects() {
                     <h2 className="text-3xl font-bold text-aeros-blue tracking-widest mb-2">ACTIVE_PROJECTS</h2>
                     <p className="text-gray-400 font-mono">Manage deployments and systemd services.</p>
                 </div>
-                <button onClick={handleNewProject} className="btn btn-primary text-aeros-blue border-aeros-blue flex items-center bg-transparent hover:bg-aeros-blue hover:text-aeros-dark cursor-pointer">
+                <button onClick={handleNewProject} className="border border-aeros-gray text-white bg-transparent hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer flex items-center px-4 py-2 font-mono text-sm">
                     <Plus size={16} className="mr-2" />
                     NEW_PROJECT
                 </button>

@@ -22,11 +22,11 @@ export function ProgressBar({ value, total = 100, length = 20, color = 'text-cya
     return (
         <div className="flex flex-col mb-4 font-mono text-xs">
             {label && (
-                <div className="flex justify-between items-end mb-1">
+                <div className="flex justify-between items-center mb-1">
                     <span className="text-gray-400">{label}</span>
-                    <div className="text-right">
-                        {details && <span className="text-gray-500 mr-2 text-[10px]">{details}</span>}
-                        <span className={`${color} font-bold`}>{percentage.toFixed(0)}%</span>
+                    <div className="text-right flex items-center justify-end">
+                        {details && <span className="text-gray-500 mr-3 text-[10px] tracking-normal">{details}</span>}
+                        <span className={`${color} font-bold min-w-[32px]`}>{percentage.toFixed(0)}%</span>
                     </div>
                 </div>
             )}

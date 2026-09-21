@@ -106,10 +106,10 @@ export function Dashboard() {
                         SYSTEM_COMMANDS
                     </header>
                     <div className="p-4 grid grid-cols-2 gap-4 mt-auto">
-                        <button className="btn btn-default w-full bg-transparent border-aeros-gray text-white hover:bg-aeros-gray hover:text-white transition-colors cursor-pointer text-xs p-2 font-mono">REBOOT_SYS</button>
-                        <button className="btn btn-default w-full bg-transparent border-aeros-gray text-white hover:bg-aeros-gray hover:text-white transition-colors cursor-pointer text-xs p-2 font-mono">PANEL_RESTART</button>
-                        <button className="btn btn-default w-full bg-transparent border-aeros-gray text-white hover:bg-aeros-gray hover:text-white transition-colors cursor-pointer text-xs p-2 font-mono">CLEAR_CACHE</button>
-                        <button className="btn btn-error w-full bg-transparent border-error-color text-error-color hover:bg-error-color hover:text-white transition-colors cursor-pointer text-xs p-2 font-mono">EMERGENCY_STOP</button>
+                        <button className="w-full bg-transparent border border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer text-xs p-2 font-mono">REBOOT_SYS</button>
+                        <button className="w-full bg-transparent border border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer text-xs p-2 font-mono">PANEL_RESTART</button>
+                        <button className="w-full bg-transparent border border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer text-xs p-2 font-mono">CLEAR_CACHE</button>
+                        <button className="w-full bg-transparent border border-error-color text-error-color hover:bg-error-color hover:text-white transition-colors cursor-pointer text-xs p-2 font-mono">EMERGENCY_STOP</button>
                     </div>
                 </div>
             </div>

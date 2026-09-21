@@ -134,3 +134,43 @@ apiRouter.post('/projects', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+apiRouter.get('/system/info', async (req, res) => {
+    try {
+        const os = require('os');
+        const fs = require('fs');
+        
+        let osName = os.type();
+        try {
+            const osRelease = fs.readFileSync('/etc/os-release', 'utf8');
+            const match = osRelease.match(/PRETTY_NAME="([^"]+)"/);
+            if (match) osName = match[1];
+        } catch(e) {}
+        
+        let ipv4 = 'UNKNOWN';
+        const interfaces = os.networkInterfaces();
+        for (const name of Object.keys(interfaces)) {
+            for (const iface of interfaces[name]) {
+                if (iface.family === 'IPv4' && !iface.internal) {
+                    ipv4 = iface.address;
+                    break;
+                }
+            }
+            if (ipv4 !== 'UNKNOWN') break;
+        }
+
+        const info = {
+            hostname: os.hostname(),
+            os: osName,
+            kernel: os.release(),
+            uptime: os.uptime(),
+            cpu: os.cpus()[0].model,
+            cores: os.cpus().length,
+            memory: os.totalmem(),
+            ipv4
+        };
+        res.json(info);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});

@@ -32,10 +32,17 @@ export async function getSystemMetrics() {
     let batteryPercentage = null;
     let batteryStatus = 'UNKNOWN';
     try {
-        const capacity = await fs.readFile('/sys/class/power_supply/BAT0/capacity', 'utf8');
-        batteryPercentage = parseInt(capacity.trim(), 10);
-        const status = await fs.readFile('/sys/class/power_supply/BAT0/status', 'utf8');
-        batteryStatus = status.trim().toUpperCase();
+        const supplies = await fs.readdir('/sys/class/power_supply');
+        const batDir = supplies.find(s => s.startsWith('BAT'));
+        if (batDir) {
+            const capacity = await fs.readFile(`/sys/class/power_supply/${batDir}/capacity`, 'utf8');
+            batteryPercentage = parseInt(capacity.trim(), 10);
+            const status = await fs.readFile(`/sys/class/power_supply/${batDir}/status`, 'utf8');
+            batteryStatus = status.trim().toUpperCase();
+        } else {
+            batteryStatus = 'AC_POWER';
+            batteryPercentage = 100;
+        }
     } catch {
         batteryStatus = 'NOT_FOUND';
     }
