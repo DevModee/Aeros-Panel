@@ -19,9 +19,11 @@ import path from 'path';
 app.use('/api', apiRouter);
 
 app.use(express.static(path.join(__dirname, '../../frontend/dist')));
-app.get('*', (req, res) => {
+app.use((req, res, next) => {
     if (!req.path.startsWith('/api')) {
         res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'));
+    } else {
+        next();
     }
 });
 
