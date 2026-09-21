@@ -29,7 +29,7 @@ export function ServerInfo() {
 
             <div className="grid grid-cols-2 gap-6">
                 <div className="terminal-card border-aeros-gray p-6 bg-[#050505]">
-                    <div className="text-aeros-purple flex items-center mb-6 pl-4 font-bold text-lg">
+                    <div className="text-aeros-blue flex items-center mb-6 pl-4 font-bold text-lg">
                         <Server className="mr-4 text-aeros-blue" size={22} />
                         OS_INFO
                     </div>
@@ -42,7 +42,7 @@ export function ServerInfo() {
                 </div>
 
                 <div className="terminal-card border-aeros-gray p-6 bg-[#050505]">
-                    <div className="text-aeros-purple flex items-center mb-6 pl-4 font-bold text-lg">
+                    <div className="text-aeros-blue flex items-center mb-6 pl-4 font-bold text-lg">
                         <Cpu className="mr-4 text-aeros-blue" size={22} />
                         HARDWARE
                     </div>
@@ -55,7 +55,7 @@ export function ServerInfo() {
                 </div>
                 
                 <div className="terminal-card border-aeros-gray p-6 bg-[#050505]">
-                    <div className="text-aeros-purple flex items-center mb-6 pl-4 font-bold text-lg">
+                    <div className="text-aeros-blue flex items-center mb-6 pl-4 font-bold text-lg">
                         <Network className="mr-4 text-aeros-blue" size={22} />
                         NETWORK
                     </div>
@@ -76,7 +76,7 @@ export function ServerInfo() {
                 </div>
 
                 <div className="terminal-card border-aeros-gray p-6 bg-[#050505]">
-                    <div className="text-aeros-purple flex items-center mb-6 pl-4 font-bold text-lg">
+                    <div className="text-aeros-blue flex items-center mb-6 pl-4 font-bold text-lg">
                         <Shield className="mr-4 text-aeros-blue" size={22} />
                         SECURITY
                     </div>

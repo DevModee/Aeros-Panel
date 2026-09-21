@@ -52,12 +52,12 @@ export function Dashboard() {
             </header>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="col-span-1 terminal-card border-aeros-gray">
-                    <header className="text-aeros-blue flex items-center">
-                        <Cpu className="mr-2" size={18} />
+                <div className="col-span-1 terminal-card border-aeros-gray !p-8 bg-[#050505]">
+                    <div className="text-aeros-blue flex items-center mb-6 font-bold text-lg">
+                        <Cpu className="mr-4" size={22} />
                         RESOURCE_MONITOR
-                    </header>
-                    <div className="p-4 space-y-4">
+                    </div>
+                    <div className="space-y-4">
                         <ProgressBar 
                             label={`CPU CORE 0 [${metrics.cpu.cores} THREADS]`} 
                             value={metrics.cpu.usage} 
@@ -78,12 +78,12 @@ export function Dashboard() {
                     </div>
                 </div>
 
-                <div className="col-span-1 terminal-card border-aeros-gray">
-                    <header className="text-aeros-blue flex items-center">
-                        <Thermometer className="mr-2" size={18} />
+                <div className="col-span-1 terminal-card border-aeros-gray !p-8 bg-[#050505]">
+                    <div className="text-aeros-blue flex items-center mb-6 font-bold text-lg">
+                        <Thermometer className="mr-4" size={22} />
                         POWER_&_THERMAL
-                    </header>
-                    <div className="p-4 space-y-6">
+                    </div>
+                    <div className="space-y-6">
                         <div>
                             <div className="flex justify-between mb-2 text-sm text-gray-400">
                                 <span>THERMAL_ZONE_0</span>
@@ -100,11 +100,11 @@ export function Dashboard() {
                     </div>
                 </div>
 
-                <div className="col-span-1 terminal-card border-aeros-gray flex flex-col">
-                    <header className="text-aeros-blue flex items-center">
-                        <HardDrive className="mr-2" size={18} />
+                <div className="col-span-1 terminal-card border-aeros-gray flex flex-col !p-8 bg-[#050505]">
+                    <div className="text-aeros-blue flex items-center mb-6 font-bold text-lg">
+                        <HardDrive className="mr-4" size={22} />
                         SYSTEM_COMMANDS
-                    </header>
+                    </div>
                     <div className="p-4 grid grid-cols-2 gap-4 mt-auto">
                         <button className="w-full bg-transparent border border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer text-xs p-2 font-mono">REBOOT_SYS</button>
                         <button className="w-full bg-transparent border border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer text-xs p-2 font-mono">PANEL_RESTART</button>

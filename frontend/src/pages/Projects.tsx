@@ -150,8 +150,10 @@ export function Projects() {
             </header>
 
             <div className="flex gap-6 flex-1 min-h-0">
-                <div className="w-1/3 terminal-card border-aeros-gray overflow-y-auto">
-                    <header>Project List</header>
+                <div className="w-1/3 terminal-card border-aeros-gray overflow-y-auto !p-6 bg-[#050505]">
+                    <div className="text-aeros-blue flex items-center mb-6 font-bold text-lg">
+                        PROJECT_LIST
+                    </div>
                     <div className="list-group">
                         {projects.map((p) => (
                             <div 
