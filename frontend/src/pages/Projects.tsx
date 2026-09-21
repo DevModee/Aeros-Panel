@@ -41,7 +41,7 @@ export function Projects() {
 
     const fetchProjects = async () => {
         try {
-            const response = await fetch('http://localhost:3000/api/projects');
+            const response = await fetch(`http://${window.location.hostname}:3000/api/projects`);
             const data = await response.json();
             setProjects(data);
         } catch (error) {
@@ -53,7 +53,7 @@ export function Projects() {
         if (wsRef.current) wsRef.current.close();
         setLogs([]);
         
-        const ws = new WebSocket(`ws://localhost:3000?service=${serviceName}`);
+        const ws = new WebSocket(`ws://${window.location.hostname}:3000?service=${serviceName}`);
         ws.onmessage = (event) => {
             setLogs((prev) => [...prev, event.data].slice(-100));
         };
@@ -63,7 +63,7 @@ export function Projects() {
     const handleAction = async (action: 'start' | 'stop' | 'restart') => {
         if (!selectedProject) return;
         try {
-            await fetch(`http://localhost:3000/api/projects/${selectedProject.id}/${action}`, {
+            await fetch(`http://${window.location.hostname}:3000/api/projects/${selectedProject.id}/${action}`, {
                 method: 'POST'
             });
             fetchProjects();
@@ -76,7 +76,7 @@ export function Projects() {
         if (!selectedProject) return;
         try {
             const newStatus = !selectedProject.autostart;
-            await fetch(`http://localhost:3000/api/projects/${selectedProject.id}/autostart`, {
+            await fetch(`http://${window.location.hostname}:3000/api/projects/${selectedProject.id}/autostart`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ enabled: newStatus })

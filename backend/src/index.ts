@@ -14,7 +14,16 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+import path from 'path';
+
 app.use('/api', apiRouter);
+
+app.use(express.static(path.join(__dirname, '../../frontend/dist')));
+app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+        res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'));
+    }
+});
 
 const server = http.createServer(app);
 setupWebSocket(server);
