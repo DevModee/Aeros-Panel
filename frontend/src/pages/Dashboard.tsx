@@ -58,9 +58,23 @@ export function Dashboard() {
                         RESOURCE_MONITOR
                     </header>
                     <div className="p-4 space-y-4">
-                        <ProgressBar label={`CPU CORE 0 [${metrics.cpu.cores} THREADS]`} value={metrics.cpu.usage} color="text-aeros-blue" />
-                        <ProgressBar label="MEMORY (RAM)" value={metrics.memory.percentage} color="text-yellow-500" />
-                        <ProgressBar label="STORAGE" value={metrics.storage.percentage} color="text-error-color" />
+                        <ProgressBar 
+                            label={`CPU CORE 0 [${metrics.cpu.cores} THREADS]`} 
+                            value={metrics.cpu.usage} 
+                            color="text-aeros-blue" 
+                        />
+                        <ProgressBar 
+                            label="MEMORY (RAM)" 
+                            value={metrics.memory.percentage} 
+                            details={`${Math.round(metrics.memory.used / 1024 / 1024)}MB / ${Math.round(metrics.memory.total / 1024 / 1024)}MB`}
+                            color="text-yellow-500" 
+                        />
+                        <ProgressBar 
+                            label="STORAGE" 
+                            value={metrics.storage.percentage} 
+                            details={`${Math.round(metrics.storage.used / 1024 / 1024 / 1024)}GB / ${Math.round(metrics.storage.total / 1024 / 1024 / 1024)}GB`}
+                            color="text-error-color" 
+                        />
                     </div>
                 </div>
 
@@ -89,13 +103,13 @@ export function Dashboard() {
                 <div className="col-span-1 terminal-card border-aeros-gray flex flex-col">
                     <header className="text-aeros-blue flex items-center">
                         <HardDrive className="mr-2" size={18} />
-                        QUICK_ACTIONS
+                        SYSTEM_COMMANDS
                     </header>
                     <div className="p-4 grid grid-cols-2 gap-4 mt-auto">
-                        <button className="btn btn-default w-full bg-transparent border-aeros-gray hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer">INIT</button>
-                        <button className="btn btn-default w-full bg-transparent border-aeros-gray hover:border-green-500 hover:text-green-500 transition-colors cursor-pointer">SAVE</button>
-                        <button className="btn btn-default w-full bg-transparent border-aeros-gray hover:border-yellow-500 hover:text-yellow-500 transition-colors cursor-pointer">PAUSE</button>
-                        <button className="btn btn-default w-full bg-transparent border-aeros-gray hover:border-red-500 hover:text-red-500 transition-colors cursor-pointer">KILL</button>
+                        <button className="btn btn-default w-full bg-transparent border-aeros-gray text-white hover:bg-aeros-gray hover:text-white transition-colors cursor-pointer text-xs p-2 font-mono">REBOOT_SYS</button>
+                        <button className="btn btn-default w-full bg-transparent border-aeros-gray text-white hover:bg-aeros-gray hover:text-white transition-colors cursor-pointer text-xs p-2 font-mono">PANEL_RESTART</button>
+                        <button className="btn btn-default w-full bg-transparent border-aeros-gray text-white hover:bg-aeros-gray hover:text-white transition-colors cursor-pointer text-xs p-2 font-mono">CLEAR_CACHE</button>
+                        <button className="btn btn-error w-full bg-transparent border-error-color text-error-color hover:bg-error-color hover:text-white transition-colors cursor-pointer text-xs p-2 font-mono">EMERGENCY_STOP</button>
                     </div>
                 </div>
             </div>
