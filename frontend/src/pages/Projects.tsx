@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Terminal as TerminalIcon, Play, Square, RotateCw, Plus } from 'lucide-react';
+import { Terminal as TerminalIcon, Play, Square, RotateCw, Plus, Power } from 'lucide-react';
 
 interface Project {
     id: number;
@@ -8,6 +8,7 @@ interface Project {
     repository: string;
     branch: string;
     status: string;
+    autostart: number;
 }
 
 export function Projects() {
@@ -24,13 +25,15 @@ export function Projects() {
     useEffect(() => {
         if (selectedProject) {
             connectWebSocket(selectedProject.service_name);
+            const updated = projects.find(p => p.id === selectedProject.id);
+            if (updated) setSelectedProject(updated);
         }
         return () => {
             if (wsRef.current) {
                 wsRef.current.close();
             }
         };
-    }, [selectedProject]);
+    }, [selectedProject?.id, projects]);
 
     useEffect(() => {
         logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -69,6 +72,21 @@ export function Projects() {
         }
     };
 
+    const toggleAutostart = async () => {
+        if (!selectedProject) return;
+        try {
+            const newStatus = !selectedProject.autostart;
+            await fetch(`http://localhost:3000/api/projects/${selectedProject.id}/autostart`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: newStatus })
+            });
+            fetchProjects();
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     return (
         <div className="max-w-6xl mx-auto font-mono flex flex-col h-full">
             <header className="mb-6 border-b border-panel-border pb-4 flex justify-between items-end">
@@ -96,7 +114,10 @@ export function Projects() {
                                     {p.status.toUpperCase()}
                                 </span>
                             </div>
-                            <div className="text-xs text-gray-500 truncate">{p.service_name}</div>
+                            <div className="text-xs text-gray-500 flex justify-between">
+                                <span>{p.service_name}</span>
+                                {p.autostart ? <span className="text-cyan-500 text-[10px]">AUTOSTART</span> : null}
+                            </div>
                         </div>
                     ))}
                     {projects.length === 0 && (
@@ -110,6 +131,14 @@ export function Projects() {
                             <div className="p-4 border-b border-panel-border flex justify-between items-center bg-panel-bg">
                                 <span className="text-cyan-500 font-bold">{selectedProject.name} // TERMINAL</span>
                                 <div className="flex gap-2">
+                                    <button 
+                                        onClick={toggleAutostart} 
+                                        className={`p-2 border border-panel-border flex items-center text-xs px-3 hover:bg-panel-border ${selectedProject.autostart ? 'text-cyan-500' : 'text-gray-500'}`}
+                                        title="Toggle Boot Autostart"
+                                    >
+                                        <Power size={14} className="mr-2" />
+                                        AUTOSTART
+                                    </button>
                                     <button onClick={() => handleAction('start')} className="p-2 border border-panel-border text-neon-green hover:bg-panel-border"><Play size={16} /></button>
                                     <button onClick={() => handleAction('restart')} className="p-2 border border-panel-border text-yellow-500 hover:bg-panel-border"><RotateCw size={16} /></button>
                                     <button onClick={() => handleAction('stop')} className="p-2 border border-panel-border text-red-500 hover:bg-panel-border"><Square size={16} /></button>
