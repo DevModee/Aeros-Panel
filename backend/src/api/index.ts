@@ -148,16 +148,24 @@ apiRouter.get('/system/info', async (req, res) => {
         } catch(e) {}
         
         let ipv4 = 'UNKNOWN';
+        let mac = 'UNKNOWN';
         const interfaces = os.networkInterfaces();
         for (const name of Object.keys(interfaces)) {
             for (const iface of interfaces[name]) {
                 if (iface.family === 'IPv4' && !iface.internal) {
                     ipv4 = iface.address;
+                    mac = iface.mac;
                     break;
                 }
             }
             if (ipv4 !== 'UNKNOWN') break;
         }
+
+        let storageTotal = 0;
+        try {
+            const stats = fs.statfsSync('/');
+            storageTotal = stats.blocks * stats.bsize;
+        } catch(e) {}
 
         const info = {
             hostname: os.hostname(),
@@ -167,7 +175,9 @@ apiRouter.get('/system/info', async (req, res) => {
             cpu: os.cpus()[0].model,
             cores: os.cpus().length,
             memory: os.totalmem(),
-            ipv4
+            ipv4,
+            mac,
+            storageTotal
         };
         res.json(info);
     } catch (error: any) {
