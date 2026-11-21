@@ -1,4 +1,4 @@
-import { Terminal, Server, FolderGit2, Power } from 'lucide-react';
+import { Terminal, Server, FolderGit2, Power, Settings as SettingsIcon } from 'lucide-react';
 import type { AuthUser } from '../pages/Login';
 
 interface LayoutProps {
@@ -14,7 +14,7 @@ export function Layout({ children, currentPath, onNavigate, user, onLogout }: La
         { id: 'dashboard', label: 'DASHBOARD', icon: <Terminal size={18} /> },
         { id: 'projects', label: 'PROJECTS', icon: <FolderGit2 size={18} /> },
         { id: 'server', label: 'SERVER_INFO', icon: <Server size={18} /> },
-        // { id: 'settings', label: 'SETTINGS', icon: <Settings size={18} /> },
+        { id: 'settings', label: 'SETTINGS', icon: <SettingsIcon size={18} /> },
     ];
 
     return (

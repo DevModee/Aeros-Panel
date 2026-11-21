@@ -22,7 +22,9 @@ import {
 import { deployProject, isDeployRunning } from '../system/deploy';
 import { getRemoteAccessInfo } from '../system/remote';
 import { db } from '../database/db';
+import { getPublicStatusConfig, updatePublicStatusConfig } from '../database/settings';
 import { authRouter } from './auth';
+import { publicStatusRouter, invalidatePublicStatusCache } from './publicStatus';
 import { requireAuth } from '../auth/session';
 
 export const apiRouter = Router();
@@ -38,9 +40,31 @@ apiRouter.get('/health', (_req, res) => {
 });
 
 apiRouter.use('/auth', authRouter);
+apiRouter.use('/public', publicStatusRouter);
 
 // Everything below requires a valid session cookie
 apiRouter.use(requireAuth);
+
+apiRouter.get('/settings/public-status', async (_req, res) => {
+    try {
+        const config = await getPublicStatusConfig();
+        res.json(config);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+apiRouter.put('/settings/public-status', async (req, res) => {
+    try {
+        const enabled = typeof req.body?.enabled === 'boolean' ? req.body.enabled : undefined;
+        const token = typeof req.body?.token === 'string' ? req.body.token : undefined;
+        const updated = await updatePublicStatusConfig({ enabled, token });
+        invalidatePublicStatusCache();
+        res.json(updated);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
 apiRouter.get('/system/metrics', async (_req, res) => {
     try {
