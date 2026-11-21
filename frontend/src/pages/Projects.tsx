@@ -1,6 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Terminal as TerminalIcon, Play, Square, RotateCw, Plus, Power, FileText, Save, X, Trash2 } from 'lucide-react';
-import { apiFetch, buildWsUrl } from '../lib/api';
+import {
+    Terminal as TerminalIcon,
+    Play,
+    Square,
+    RotateCw,
+    Plus,
+    Power,
+    FileText,
+    Save,
+    X,
+    Trash2,
+    Rocket
+} from 'lucide-react';
+import { apiFetch, ApiError, buildWsUrl } from '../lib/api';
 import { NewProjectModal } from '../components/NewProjectModal';
 
 interface Project {
@@ -16,6 +28,7 @@ interface Project {
     work_dir?: string | null;
     memory_max?: string | null;
     last_deploy_at?: string | null;
+    deploying?: boolean;
 }
 
 export function Projects() {
@@ -25,12 +38,16 @@ export function Projects() {
     const [isEditingEnv, setIsEditingEnv] = useState(false);
     const [envContent, setEnvContent] = useState('');
     const [isNewModalOpen, setIsNewModalOpen] = useState(false);
+    const [deployingService, setDeployingService] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const logsEndRef = useRef<HTMLDivElement>(null);
 
     const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
     const selectedServiceName = selectedProject?.service_name ?? null;
+    const isSelectedDeploying = Boolean(
+        selectedProject && (selectedProject.deploying || deployingService === selectedProject.service_name)
+    );
 
     const fetchProjects = useCallback(async () => {
         try {
@@ -62,7 +79,12 @@ export function Projects() {
 
         const ws = new WebSocket(buildWsUrl({ service: selectedServiceName }));
         ws.onmessage = (event) => {
-            setLogs((prev) => [...prev, String(event.data)].slice(-200));
+            const msg = String(event.data);
+            setLogs((prev) => [...prev, msg].slice(-300));
+            if (msg.includes('[DEPLOY] Completed') || msg.includes('[DEPLOY] FAILED')) {
+                setDeployingService((curr) => (curr === selectedServiceName ? null : curr));
+                void fetchProjects();
+            }
         };
         wsRef.current = ws;
 
@@ -72,7 +94,7 @@ export function Projects() {
                 wsRef.current = null;
             }
         };
-    }, [selectedServiceName, isEditingEnv]);
+    }, [selectedServiceName, isEditingEnv, fetchProjects]);
 
     useEffect(() => {
         logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -95,6 +117,23 @@ export function Projects() {
             fetchProjects();
         } catch (error) {
             console.error(error);
+        }
+    };
+
+    const handleDeploy = async () => {
+        if (!selectedProject || isSelectedDeploying) return;
+        setNotice(null);
+        setIsEditingEnv(false);
+        setDeployingService(selectedProject.service_name);
+
+        try {
+            await apiFetch(`/api/projects/${selectedProject.id}/deploy`, {
+                method: 'POST'
+            });
+        } catch (error) {
+            setDeployingService(null);
+            const message = error instanceof ApiError ? error.message : 'Failed to start deployment.';
+            setNotice(message);
         }
     };
 
@@ -139,6 +178,11 @@ export function Projects() {
         setIsEditingEnv(false);
         setSelectedProjectId(createdId);
         setNotice(warning || 'Project created and systemd service configured.');
+    };
+
+    const formatDeployTime = (iso: string) => {
+        const d = new Date(iso);
+        return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
     };
 
     return (
@@ -209,12 +253,21 @@ export function Projects() {
                 <div className="w-2/3 terminal-card border-aeros-gray flex flex-col">
                     {selectedProject ? (
                         <>
-                            <header className="flex justify-between items-center">
+                            <header className="flex justify-between items-center gap-2 flex-wrap">
                                 <span className="text-aeros-blue font-bold font-mono">
                                     {selectedProject.name} // {isEditingEnv ? 'EDIT_ENV' : 'TERMINAL'}
                                 </span>
                                 {!isEditingEnv ? (
-                                    <div className="flex gap-2">
+                                    <div className="flex gap-2 flex-wrap">
+                                        <button
+                                            onClick={handleDeploy}
+                                            disabled={isSelectedDeploying}
+                                            className="btn btn-default py-1 px-2 text-xs flex items-center bg-transparent border-aeros-blue text-aeros-blue hover:bg-aeros-blue hover:text-black cursor-pointer disabled:opacity-50"
+                                            title="Git pull, build if needed, and restart service"
+                                        >
+                                            <Rocket size={14} className={`mr-2 ${isSelectedDeploying ? 'animate-pulse' : ''}`} />
+                                            {isSelectedDeploying ? 'DEPLOYING...' : 'DEPLOY'}
+                                        </button>
                                         <button
                                             onClick={() => setLogs([])}
                                             className="btn btn-default py-1 px-2 text-xs flex items-center bg-transparent border-aeros-gray hover:border-error-color hover:text-error-color cursor-pointer text-gray-500"
@@ -239,9 +292,9 @@ export function Projects() {
                                             <Power size={14} className="mr-2" />
                                             BOOT
                                         </button>
-                                        <button onClick={() => handleAction('start')} className="btn btn-default py-1 px-2 bg-transparent text-green-500 border-aeros-gray hover:border-green-500 cursor-pointer"><Play size={14} /></button>
-                                        <button onClick={() => handleAction('restart')} className="btn btn-default py-1 px-2 bg-transparent text-yellow-500 border-aeros-gray hover:border-yellow-500 cursor-pointer"><RotateCw size={14} /></button>
-                                        <button onClick={() => handleAction('stop')} className="btn btn-default py-1 px-2 bg-transparent text-red-500 border-aeros-gray hover:border-red-500 cursor-pointer"><Square size={14} /></button>
+                                        <button onClick={() => handleAction('start')} className="btn btn-default py-1 px-2 bg-transparent text-green-500 border-aeros-gray hover:border-green-500 cursor-pointer" title="Start"><Play size={14} /></button>
+                                        <button onClick={() => handleAction('restart')} className="btn btn-default py-1 px-2 bg-transparent text-yellow-500 border-aeros-gray hover:border-yellow-500 cursor-pointer" title="Restart"><RotateCw size={14} /></button>
+                                        <button onClick={() => handleAction('stop')} className="btn btn-default py-1 px-2 bg-transparent text-red-500 border-aeros-gray hover:border-red-500 cursor-pointer" title="Stop"><Square size={14} /></button>
                                     </div>
                                 ) : (
                                     <div className="flex gap-2">
@@ -268,6 +321,9 @@ export function Projects() {
                                 {selectedProject.work_dir && <span>DIR: <span className="text-gray-200">{selectedProject.work_dir}</span></span>}
                                 {selectedProject.branch && <span>BRANCH: <span className="text-aeros-blue">{selectedProject.branch}</span></span>}
                                 {selectedProject.memory_max && <span>RAM_CAP: <span className="text-aeros-purple">{selectedProject.memory_max}</span></span>}
+                                {selectedProject.last_deploy_at && (
+                                    <span>LAST_DEPLOY: <span className="text-gray-300">{formatDeployTime(selectedProject.last_deploy_at)}</span></span>
+                                )}
                             </div>
 
                             {isEditingEnv ? (
@@ -283,9 +339,16 @@ export function Projects() {
                                 </div>
                             ) : (
                                 <div className="flex-1 p-4 overflow-y-auto text-xs text-gray-300 bg-[#050505] font-mono">
-                                    {logs.map((log, i) => (
-                                        <div key={i} className="mb-1 whitespace-pre-wrap">{log}</div>
-                                    ))}
+                                    {logs.map((log, i) => {
+                                        const lineColor = log.startsWith('[DEPLOY] FAILED') || log.startsWith('ERROR:')
+                                            ? 'text-red-400'
+                                            : log.startsWith('[DEPLOY]')
+                                                ? 'text-aeros-blue'
+                                                : 'text-gray-300';
+                                        return (
+                                            <div key={i} className={`mb-1 whitespace-pre-wrap ${lineColor}`}>{log}</div>
+                                        );
+                                    })}
                                     <div ref={logsEndRef} />
                                 </div>
                             )}

@@ -4,6 +4,18 @@ import { Server } from 'http';
 import { getSessionTokenFromRequest, validateSessionToken } from '../auth/session';
 
 const SERVICE_NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const serviceSubscribers = new Map<string, Set<WebSocket>>();
+
+export function broadcastServiceLog(serviceName: string, message: string): void {
+    const subscribers = serviceSubscribers.get(serviceName);
+    if (!subscribers || subscribers.size === 0) return;
+
+    for (const ws of subscribers) {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(message);
+        }
+    }
+}
 
 export function setupWebSocket(server: Server) {
     const wss = new WebSocketServer({ server });
@@ -29,6 +41,13 @@ export function setupWebSocket(server: Server) {
             return;
         }
 
+        let subscribers = serviceSubscribers.get(serviceName);
+        if (!subscribers) {
+            subscribers = new Set();
+            serviceSubscribers.set(serviceName, subscribers);
+        }
+        subscribers.add(ws);
+
         const journalctl = spawn('journalctl', ['-u', serviceName, '-f', '-n', '100']);
 
         journalctl.stdout.on('data', (data) => {
@@ -51,6 +70,13 @@ export function setupWebSocket(server: Server) {
 
         ws.on('close', () => {
             journalctl.kill();
+            const set = serviceSubscribers.get(serviceName);
+            if (set) {
+                set.delete(ws);
+                if (set.size === 0) {
+                    serviceSubscribers.delete(serviceName);
+                }
+            }
         });
 
         journalctl.on('close', () => {

@@ -19,6 +19,7 @@ import {
     getTemplateById,
     type TemplateId
 } from '../system/templates';
+import { deployProject, isDeployRunning } from '../system/deploy';
 import { db } from '../database/db';
 import { authRouter } from './auth';
 import { requireAuth } from '../auth/session';
@@ -87,7 +88,7 @@ apiRouter.get('/projects', async (_req, res) => {
 
         const projectsWithStatus = await Promise.all(projects.map(async (p) => {
             const status = await getServiceStatus(p.service_name);
-            return { ...p, status };
+            return { ...p, status, deploying: isDeployRunning(p.service_name) };
         }));
 
         res.json(projectsWithStatus);
@@ -213,6 +214,22 @@ apiRouter.post('/projects/:id/restart', async (req, res) => {
 
         await restartService(project.service_name);
         res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+apiRouter.post('/projects/:id/deploy', async (req, res) => {
+    try {
+        const project = await db('projects').where('id', req.params.id).first();
+        if (!project) return res.status(404).json({ error: 'Not found' });
+
+        if (isDeployRunning(project.service_name)) {
+            return res.status(409).json({ error: 'Deployment already in progress for this project' });
+        }
+
+        void deployProject(project);
+        res.status(202).json({ started: true, service_name: project.service_name });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
