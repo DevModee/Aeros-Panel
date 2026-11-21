@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { spawn } from 'child_process';
 import { Server } from 'http';
 import { getSessionTokenFromRequest, validateSessionToken } from '../auth/session';
+import { isRequestOriginAllowed } from '../auth/origin';
 
 const SERVICE_NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const serviceSubscribers = new Map<string, Set<WebSocket>>();
@@ -21,6 +22,11 @@ export function setupWebSocket(server: Server) {
     const wss = new WebSocketServer({ server });
 
     wss.on('connection', async (ws: WebSocket, req) => {
+        if (!isRequestOriginAllowed(req, { allowMissingOrigin: false })) {
+            ws.close(4403, 'Forbidden origin');
+            return;
+        }
+
         try {
             const token = getSessionTokenFromRequest(req);
             const user = await validateSessionToken(token);

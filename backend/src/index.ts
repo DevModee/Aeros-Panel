@@ -16,6 +16,14 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 app.set('trust proxy', 1);
 
+app.use((_req, res, next) => {
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'none'");
+    next();
+});
+
 const corsOrigin = process.env.CORS_ORIGIN?.trim();
 if (corsOrigin) {
     app.use(cors({

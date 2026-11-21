@@ -26,10 +26,14 @@ import { getPublicStatusConfig, updatePublicStatusConfig } from '../database/set
 import { authRouter } from './auth';
 import { publicStatusRouter, invalidatePublicStatusCache } from './publicStatus';
 import { requireAuth } from '../auth/session';
+import { requireSameOriginForMutations } from '../auth/origin';
 
 export const apiRouter = Router();
 
 const BRANCH_PATTERN = /^[a-zA-Z0-9._/-]{1,120}$/;
+
+// CSRF defense-in-depth for all state-changing API requests
+apiRouter.use(requireSameOriginForMutations);
 
 // Unauthenticated endpoints
 apiRouter.get('/health', (_req, res) => {
