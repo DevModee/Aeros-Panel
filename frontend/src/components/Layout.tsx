@@ -1,12 +1,15 @@
 import { Terminal, Server, FolderGit2, Power } from 'lucide-react';
+import type { AuthUser } from '../pages/Login';
 
 interface LayoutProps {
     children: React.ReactNode;
     currentPath: string;
     onNavigate: (path: string) => void;
+    user: AuthUser;
+    onLogout: () => void;
 }
 
-export function Layout({ children, currentPath, onNavigate }: LayoutProps) {
+export function Layout({ children, currentPath, onNavigate, user, onLogout }: LayoutProps) {
     const navItems = [
         { id: 'dashboard', label: 'DASHBOARD', icon: <Terminal size={18} /> },
         { id: 'projects', label: 'PROJECTS', icon: <FolderGit2 size={18} /> },
@@ -21,7 +24,7 @@ export function Layout({ children, currentPath, onNavigate }: LayoutProps) {
                     <img src="/logo.webp" alt="Aeros Logo" className="w-10 h-10 mr-3 object-contain" />
                     <div>
                         <h1 className="text-xl text-aeros-blue font-bold tracking-widest">AEROS</h1>
-                        <p className="text-xs text-aeros-purple mt-1">v1.0.0 // ONLINE</p>
+                        <p className="text-xs text-aeros-purple mt-1">v2.0.0 // ONLINE</p>
                     </div>
                 </div>
                 <nav className="flex-1 p-4 space-y-2">
@@ -46,13 +49,17 @@ export function Layout({ children, currentPath, onNavigate }: LayoutProps) {
                 <div className="p-4 border-t border-aeros-gray">
                     <div className="flex items-center justify-between text-xs">
                         <div>
-                            <span className="text-gray-400">USER_ADMIN</span>
+                            <span className="text-gray-400">USER_{user.username.toUpperCase()}</span>
                             <div className="flex items-center mt-1">
                                 <div className="w-2 h-2 bg-aeros-purple rounded-full mr-2"></div>
                                 <span className="text-aeros-purple">ONLINE</span>
                             </div>
                         </div>
-                        <button className="text-aeros-text hover:text-error-color border-0 bg-transparent cursor-pointer">
+                        <button
+                            onClick={onLogout}
+                            title="Log out"
+                            className="text-aeros-text hover:text-error-color border-0 bg-transparent cursor-pointer"
+                        >
                             <Power size={16} />
                         </button>
                     </div>

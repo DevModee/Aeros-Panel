@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Server, Cpu, Network, Shield, Eye, EyeOff } from 'lucide-react';
+import { apiFetch } from '../lib/api';
 
 export function ServerInfo() {
     const [info, setInfo] = useState<any>(null);
     const [showIp, setShowIp] = useState(false);
 
     useEffect(() => {
-        fetch(`http://${window.location.hostname}:3000/api/system/info`)
-            .then(r => r.json())
+        apiFetch('/api/system/info')
             .then(data => setInfo(data))
             .catch(e => console.error(e));
     }, []);

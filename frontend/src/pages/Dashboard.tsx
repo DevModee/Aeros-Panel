@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ProgressBar } from '../components/ProgressBar';
 import { Activity, Cpu, HardDrive, Thermometer } from 'lucide-react';
+import { apiFetch } from '../lib/api';
 
 interface SystemMetrics {
     cpu: { usage: number; cores: number };
@@ -16,8 +17,7 @@ export function Dashboard() {
     useEffect(() => {
         const fetchMetrics = async () => {
             try {
-                const response = await fetch(`http://${window.location.hostname}:3000/api/system/metrics`);
-                const data = await response.json();
+                const data = await apiFetch<SystemMetrics>('/api/system/metrics');
                 setMetrics(data);
             } catch (error) {
                 console.error(error);

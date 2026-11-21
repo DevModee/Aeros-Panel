@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Terminal as TerminalIcon, Play, Square, RotateCw, Plus, Power, FileText, Save, X, Trash2 } from 'lucide-react';
+import { apiFetch, buildWsUrl } from '../lib/api';
 
 interface Project {
     id: number;
@@ -14,59 +15,74 @@ interface Project {
 
 export function Projects() {
     const [projects, setProjects] = useState<Project[]>([]);
-    const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+    const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
     const [logs, setLogs] = useState<string[]>([]);
     const [isEditingEnv, setIsEditingEnv] = useState(false);
     const [envContent, setEnvContent] = useState('');
     const wsRef = useRef<WebSocket | null>(null);
     const logsEndRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        fetchProjects();
+    const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
+    const selectedServiceName = selectedProject?.service_name ?? null;
+
+    const fetchProjects = useCallback(async () => {
+        try {
+            const data = await apiFetch<Project[]>('/api/projects');
+            setProjects(data);
+        } catch (error) {
+            console.error(error);
+        }
     }, []);
 
     useEffect(() => {
-        if (selectedProject && !isEditingEnv) {
-            connectWebSocket(selectedProject.service_name);
-            const updated = projects.find(p => p.id === selectedProject.id);
-            if (updated) setSelectedProject(updated);
-        }
+        let active = true;
+        apiFetch<Project[]>('/api/projects')
+            .then((data) => {
+                if (active) setProjects(data);
+            })
+            .catch((error) => {
+                console.error(error);
+            });
         return () => {
-            if (wsRef.current) {
-                wsRef.current.close();
+            active = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!selectedServiceName || isEditingEnv) {
+            return;
+        }
+
+        const ws = new WebSocket(buildWsUrl({ service: selectedServiceName }));
+        ws.onmessage = (event) => {
+            setLogs((prev) => [...prev, String(event.data)].slice(-200));
+        };
+        wsRef.current = ws;
+
+        return () => {
+            ws.close();
+            if (wsRef.current === ws) {
+                wsRef.current = null;
             }
         };
-    }, [selectedProject?.id, projects, isEditingEnv]);
+    }, [selectedServiceName, isEditingEnv]);
 
     useEffect(() => {
         logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [logs]);
 
-    const fetchProjects = async () => {
-        try {
-            const response = await fetch(`http://${window.location.hostname}:3000/api/projects`);
-            const data = await response.json();
-            setProjects(data);
-        } catch (error) {
-            console.error(error);
+    const handleSelectProject = (project: Project) => {
+        if (project.id !== selectedProjectId) {
+            setLogs([]);
+            setIsEditingEnv(false);
+            setSelectedProjectId(project.id);
         }
-    };
-
-    const connectWebSocket = (serviceName: string) => {
-        if (wsRef.current) wsRef.current.close();
-        setLogs([]);
-        
-        const ws = new WebSocket(`ws://${window.location.hostname}:3000?service=${serviceName}`);
-        ws.onmessage = (event) => {
-            setLogs((prev) => [...prev, event.data].slice(-100));
-        };
-        wsRef.current = ws;
     };
 
     const handleAction = async (action: 'start' | 'stop' | 'restart') => {
         if (!selectedProject) return;
         try {
-            await fetch(`http://${window.location.hostname}:3000/api/projects/${selectedProject.id}/${action}`, {
+            await apiFetch(`/api/projects/${selectedProject.id}/${action}`, {
                 method: 'POST'
             });
             fetchProjects();
@@ -79,9 +95,8 @@ export function Projects() {
         if (!selectedProject) return;
         try {
             const newStatus = !selectedProject.autostart;
-            await fetch(`http://${window.location.hostname}:3000/api/projects/${selectedProject.id}/autostart`, {
+            await apiFetch(`/api/projects/${selectedProject.id}/autostart`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ enabled: newStatus })
             });
             fetchProjects();
@@ -100,9 +115,8 @@ export function Projects() {
     const saveEnv = async () => {
         if (!selectedProject) return;
         try {
-            await fetch(`http://${window.location.hostname}:3000/api/projects/${selectedProject.id}/env`, {
+            await apiFetch(`/api/projects/${selectedProject.id}/env`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ env_vars: envContent })
             });
             await fetchProjects();
@@ -117,16 +131,14 @@ export function Projects() {
         if (!url) return;
         const name = prompt('Ingresa un nombre para el proyecto (ej: Mi Bot):');
         if (!name) return;
-        
-        // Derivar el service_name de la url de github (ej: Repo-Name)
+
         const parts = url.split('/');
-        let serviceName = parts[parts.length - 1].replace('.git', '');
+        let serviceName = (parts[parts.length - 1] || name).replace('.git', '');
         serviceName = serviceName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
 
         try {
-            await fetch(`http://${window.location.hostname}:3000/api/projects`, {
+            await apiFetch('/api/projects', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, service_name: serviceName, repository: url })
             });
             fetchProjects();
@@ -156,9 +168,9 @@ export function Projects() {
                     </div>
                     <div className="list-group">
                         {projects.map((p) => (
-                            <div 
-                                key={p.id} 
-                                onClick={() => setSelectedProject(p)}
+                            <div
+                                key={p.id}
+                                onClick={() => handleSelectProject(p)}
                                 className={`list-group-item cursor-pointer flex flex-col p-4 border-b border-aeros-gray hover:bg-aeros-gray transition-colors ${selectedProject?.id === p.id ? 'bg-aeros-gray border-l-2 border-l-aeros-purple' : ''}`}
                             >
                                 <div className="flex justify-between items-center mb-2 font-mono">
@@ -188,7 +200,7 @@ export function Projects() {
                                 </span>
                                 {!isEditingEnv ? (
                                     <div className="flex gap-2">
-                                        <button 
+                                        <button
                                             onClick={() => setLogs([])}
                                             className="btn btn-default py-1 px-2 text-xs flex items-center bg-transparent border-aeros-gray hover:border-error-color hover:text-error-color cursor-pointer text-gray-500"
                                             title="Clear Terminal"
@@ -196,16 +208,16 @@ export function Projects() {
                                             <Trash2 size={14} className="mr-2" />
                                             CLEAR
                                         </button>
-                                        <button 
-                                            onClick={openEnvEditor} 
+                                        <button
+                                            onClick={openEnvEditor}
                                             className="btn btn-default py-1 px-2 text-xs flex items-center bg-transparent border-aeros-gray hover:border-aeros-blue hover:text-aeros-blue cursor-pointer"
                                             title="Edit .env"
                                         >
                                             <FileText size={14} className="mr-2" />
                                             .env
                                         </button>
-                                        <button 
-                                            onClick={toggleAutostart} 
+                                        <button
+                                            onClick={toggleAutostart}
                                             className={`btn btn-default py-1 px-2 text-xs flex items-center bg-transparent cursor-pointer ${selectedProject.autostart ? 'border-aeros-purple text-aeros-purple hover:bg-aeros-purple hover:text-white' : 'border-aeros-gray hover:border-aeros-purple hover:text-aeros-purple'}`}
                                             title="Toggle Boot Autostart"
                                         >
@@ -218,15 +230,15 @@ export function Projects() {
                                     </div>
                                 ) : (
                                     <div className="flex gap-2">
-                                        <button 
-                                            onClick={() => setIsEditingEnv(false)} 
+                                        <button
+                                            onClick={() => setIsEditingEnv(false)}
                                             className="btn btn-error py-1 px-2 text-xs flex items-center cursor-pointer bg-red-900 border-red-500 hover:bg-red-500 hover:text-white"
                                         >
                                             <X size={14} className="mr-2" />
                                             CANCEL
                                         </button>
-                                        <button 
-                                            onClick={saveEnv} 
+                                        <button
+                                            onClick={saveEnv}
                                             className="btn btn-primary py-1 px-2 text-xs flex items-center cursor-pointer border-aeros-blue text-aeros-blue hover:bg-aeros-blue hover:text-white bg-transparent"
                                         >
                                             <Save size={14} className="mr-2" />
@@ -235,11 +247,11 @@ export function Projects() {
                                     </div>
                                 )}
                             </header>
-                            
+
                             {isEditingEnv ? (
                                 <div className="flex-1 p-4 bg-black flex flex-col">
                                     <div className="text-gray-400 text-xs mb-2 font-mono"># Configura las variables de entorno para {selectedProject.name}</div>
-                                    <textarea 
+                                    <textarea
                                         className="flex-1 w-full bg-[#0a0a0a] text-aeros-text p-4 font-mono text-sm border border-aeros-gray focus:border-aeros-purple outline-none resize-none"
                                         value={envContent}
                                         onChange={(e) => setEnvContent(e.target.value)}
