@@ -35,6 +35,15 @@ async function ensureProjectColumns() {
     }
 }
 
+async function ensureUserColumns() {
+    const hasCreatedAt = await db.schema.hasColumn('users', 'created_at');
+    if (!hasCreatedAt) {
+        await db.schema.alterTable('users', (table) => {
+            table.integer('created_at').nullable();
+        });
+    }
+}
+
 export async function initializeDatabase() {
     const hasUsersTable = await db.schema.hasTable('users');
     if (!hasUsersTable) {
@@ -44,6 +53,8 @@ export async function initializeDatabase() {
             table.string('password').notNullable();
             table.integer('created_at').defaultTo(Date.now());
         });
+    } else {
+        await ensureUserColumns();
     }
 
     const hasSessionsTable = await db.schema.hasTable('sessions');
