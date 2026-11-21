@@ -1,3 +1,6 @@
+import path from 'path';
+import { isReservedServiceName } from './systemd';
+
 export type TemplateId = 'node' | 'python' | 'static' | 'java' | 'custom';
 
 export interface ProjectTemplate {
@@ -74,6 +77,21 @@ export const SERVICE_NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const USER_PATTERN = /^[a-z_][a-z0-9_-]{0,31}$/;
 const MEMORY_MAX_PATTERN = /^\d+[KMG]?$/i;
 
+const BLOCKED_WORK_DIR_PREFIXES = [
+    '/etc',
+    '/bin',
+    '/sbin',
+    '/usr',
+    '/lib',
+    '/lib64',
+    '/boot',
+    '/dev',
+    '/proc',
+    '/sys',
+    '/run',
+    '/var/lib'
+];
+
 export interface SystemdUnitConfig {
     name: string;
     serviceName: string;
@@ -90,6 +108,30 @@ export function getTemplateById(id: string): ProjectTemplate {
 
 function sanitizeSingleLine(value: string): string {
     return value.replace(/[\r\n]+/g, ' ').trim();
+}
+
+export function validateWorkDir(rawWorkDir: string): string {
+    const trimmed = rawWorkDir.trim();
+    if (!trimmed || /[\r\n\0]/.test(trimmed)) {
+        throw new Error('Working directory contains invalid characters.');
+    }
+
+    if (!trimmed.startsWith('/')) {
+        throw new Error('Working directory must be an absolute Linux path (e.g. /opt/my-app).');
+    }
+
+    const normalized = path.posix.resolve(trimmed);
+    if (normalized === '/') {
+        throw new Error('Working directory cannot be the filesystem root.');
+    }
+
+    for (const prefix of BLOCKED_WORK_DIR_PREFIXES) {
+        if (normalized === prefix || normalized.startsWith(`${prefix}/`)) {
+            throw new Error(`Working directory "${normalized}" cannot target system directory ${prefix}.`);
+        }
+    }
+
+    return normalized;
 }
 
 export function validateUnitConfig(input: SystemdUnitConfig): {
@@ -111,11 +153,11 @@ export function validateUnitConfig(input: SystemdUnitConfig): {
     if (!SERVICE_NAME_PATTERN.test(serviceName)) {
         throw new Error('Invalid service_name. Use lowercase letters, numbers, dots, underscores, or hyphens.');
     }
-
-    const workDir = sanitizeSingleLine(input.workDir || `/opt/${serviceName}`);
-    if (!workDir.startsWith('/') || workDir.includes('..')) {
-        throw new Error('Working directory must be an absolute Linux path (e.g. /opt/my-app).');
+    if (isReservedServiceName(serviceName)) {
+        throw new Error(`Service name "${serviceName}" is reserved for system services.`);
     }
+
+    const workDir = validateWorkDir(input.workDir || `/opt/${serviceName}`);
 
     let execStart = sanitizeSingleLine(input.execStart || tpl.defaultExecStart);
     execStart = execStart.replace(/\{\{WORK_DIR\}\}/g, workDir);

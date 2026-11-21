@@ -3,7 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import { db } from '../database/db';
-import { restartService } from './systemd';
+import { assertManageableServiceName, restartService } from './systemd';
+import { validateGitBranch, validateRepositoryUrl } from './git';
+import { validateWorkDir } from './templates';
 import { broadcastServiceLog } from '../websockets/logs';
 
 export interface DeployableProject {
@@ -109,10 +111,12 @@ export async function deployProject(project: DeployableProject): Promise<void> {
 
     activeDeploys.add(serviceName);
     const startedAt = Date.now();
-    const workDir = project.work_dir || `/opt/${serviceName}`;
-    const branch = project.branch || 'main';
 
     try {
+        assertManageableServiceName(serviceName);
+        const workDir = validateWorkDir(project.work_dir || `/opt/${serviceName}`);
+        const branch = validateGitBranch(project.branch || 'main');
+
         broadcastServiceLog(serviceName, `[DEPLOY] Starting update for ${project.name} (${serviceName})...`);
 
         let beforeHashes: Record<string, string | null> = {};
@@ -120,10 +124,16 @@ export async function deployProject(project: DeployableProject): Promise<void> {
 
         if (!fs.existsSync(path.join(workDir, '.git'))) {
             if (project.repository) {
+                const repository = validateRepositoryUrl(project.repository);
                 const parentDir = path.dirname(workDir);
                 fs.mkdirSync(parentDir, { recursive: true });
-                broadcastServiceLog(serviceName, `[DEPLOY] Cloning ${project.repository} (branch: ${branch})...`);
-                await streamCommand('git', ['clone', '--branch', branch, project.repository, workDir], parentDir, serviceName);
+                broadcastServiceLog(serviceName, `[DEPLOY] Cloning ${repository} (branch: ${branch})...`);
+                await streamCommand(
+                    'git',
+                    ['clone', '--branch', branch, '--', repository, workDir],
+                    parentDir,
+                    serviceName
+                );
                 freshlyCloned = true;
             } else if (!fs.existsSync(workDir)) {
                 throw new Error(`Working directory "${workDir}" does not exist and no Git repository is configured.`);
@@ -132,8 +142,8 @@ export async function deployProject(project: DeployableProject): Promise<void> {
             }
         } else {
             beforeHashes = snapshotHashes(workDir);
-            await streamCommand('git', ['fetch', '--prune', 'origin', branch], workDir, serviceName);
-            await streamCommand('git', ['pull', '--ff-only', 'origin', branch], workDir, serviceName);
+            await streamCommand('git', ['fetch', '--prune', 'origin', '--', branch], workDir, serviceName);
+            await streamCommand('git', ['pull', '--ff-only', 'origin', '--', branch], workDir, serviceName);
         }
 
         const afterHashes = snapshotHashes(workDir);

@@ -17,8 +17,10 @@ import {
     PROJECT_TEMPLATES,
     generateSystemdUnit,
     getTemplateById,
+    validateWorkDir,
     type TemplateId
 } from '../system/templates';
+import { validateGitBranch, validateRepositoryUrl } from '../system/git';
 import { deployProject, isDeployRunning } from '../system/deploy';
 import { getRemoteAccessInfo } from '../system/remote';
 import { db } from '../database/db';
@@ -29,8 +31,6 @@ import { requireAuth } from '../auth/session';
 import { requireSameOriginForMutations } from '../auth/origin';
 
 export const apiRouter = Router();
-
-const BRANCH_PATTERN = /^[a-zA-Z0-9._/-]{1,120}$/;
 
 // CSRF defense-in-depth for all state-changing API requests
 apiRouter.use(requireSameOriginForMutations);
@@ -130,8 +130,8 @@ apiRouter.post('/projects', async (req, res) => {
     try {
         const name = String(req.body?.name || '').trim();
         const serviceNameRaw = String(req.body?.service_name || '').trim().toLowerCase();
-        const repository = req.body?.repository ? String(req.body.repository).trim() : null;
-        const branch = String(req.body?.branch || 'main').trim();
+        const rawRepository = req.body?.repository ? String(req.body.repository).trim() : '';
+        const rawBranch = String(req.body?.branch || 'main').trim();
         const templateId = String(req.body?.template || 'custom') as TemplateId;
         const tpl = getTemplateById(templateId);
         const buildCmd = req.body?.build_cmd !== undefined
@@ -139,20 +139,31 @@ apiRouter.post('/projects', async (req, res) => {
             : tpl.defaultBuildCmd;
         const createUnit = req.body?.create_unit !== false;
 
-        if (!BRANCH_PATTERN.test(branch)) {
-            res.status(400).json({ error: 'Invalid git branch name.' });
+        let repository: string | null = null;
+        let branch: string;
+        let config: ReturnType<typeof generateSystemdUnit>['config'];
+        let unitContent: string;
+
+        try {
+            if (rawRepository) {
+                repository = validateRepositoryUrl(rawRepository);
+            }
+            branch = validateGitBranch(rawBranch);
+            const generated = generateSystemdUnit({
+                name,
+                serviceName: serviceNameRaw,
+                template: tpl.id,
+                workDir: req.body?.work_dir ? String(req.body.work_dir) : undefined,
+                execStart: req.body?.exec_start ? String(req.body.exec_start) : undefined,
+                runUser: req.body?.run_user ? String(req.body.run_user) : undefined,
+                memoryMax: req.body?.memory_max ? String(req.body.memory_max) : undefined
+            });
+            config = generated.config;
+            unitContent = generated.unitContent;
+        } catch (validationError: any) {
+            res.status(400).json({ error: validationError.message });
             return;
         }
-
-        const { config, unitContent } = generateSystemdUnit({
-            name,
-            serviceName: serviceNameRaw,
-            template: tpl.id,
-            workDir: req.body?.work_dir ? String(req.body.work_dir) : undefined,
-            execStart: req.body?.exec_start ? String(req.body.exec_start) : undefined,
-            runUser: req.body?.run_user ? String(req.body.run_user) : undefined,
-            memoryMax: req.body?.memory_max ? String(req.body.memory_max) : undefined
-        });
 
         const [id] = await db('projects').insert({
             name: config.name,
@@ -191,8 +202,7 @@ apiRouter.post('/projects', async (req, res) => {
             }
         });
     } catch (error: any) {
-        const isValidation = error.message?.includes('Invalid') || error.message?.includes('required') || error.message?.includes('Working directory');
-        res.status(isValidation ? 400 : 500).json({ error: error.message });
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -292,9 +302,9 @@ apiRouter.post('/projects/:id/env', async (req, res) => {
         await db('projects').where('id', req.params.id).update({ env_vars });
 
         // Write physical .env file on the server if directory exists
-        const projectDir = project.work_dir || `/opt/${project.service_name}`;
+        const projectDir = validateWorkDir(project.work_dir || `/opt/${project.service_name}`);
         if (fs.existsSync(projectDir)) {
-            fs.writeFileSync(path.join(projectDir, '.env'), env_vars || '');
+            fs.writeFileSync(path.join(projectDir, '.env'), env_vars || '', { mode: 0o600 });
         }
 
         res.json({ success: true });
