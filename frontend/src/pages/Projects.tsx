@@ -1,16 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Terminal as TerminalIcon, Play, Square, RotateCw, Plus, Power, FileText, Save, X, Trash2 } from 'lucide-react';
 import { apiFetch, buildWsUrl } from '../lib/api';
+import { NewProjectModal } from '../components/NewProjectModal';
 
 interface Project {
     id: number;
     name: string;
     service_name: string;
-    repository: string;
+    repository: string | null;
     branch: string;
     status: string;
     autostart: number;
-    env_vars: string;
+    env_vars: string | null;
+    template?: string;
+    work_dir?: string | null;
+    memory_max?: string | null;
+    last_deploy_at?: string | null;
 }
 
 export function Projects() {
@@ -19,6 +24,8 @@ export function Projects() {
     const [logs, setLogs] = useState<string[]>([]);
     const [isEditingEnv, setIsEditingEnv] = useState(false);
     const [envContent, setEnvContent] = useState('');
+    const [isNewModalOpen, setIsNewModalOpen] = useState(false);
+    const [notice, setNotice] = useState<string | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -126,26 +133,12 @@ export function Projects() {
         }
     };
 
-    const handleNewProject = async () => {
-        const url = prompt('Ingresa la URL de clonación de Github (ej: git@github.com:User/Repo.git):');
-        if (!url) return;
-        const name = prompt('Ingresa un nombre para el proyecto (ej: Mi Bot):');
-        if (!name) return;
-
-        const parts = url.split('/');
-        let serviceName = (parts[parts.length - 1] || name).replace('.git', '');
-        serviceName = serviceName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
-
-        try {
-            await apiFetch('/api/projects', {
-                method: 'POST',
-                body: JSON.stringify({ name, service_name: serviceName, repository: url })
-            });
-            fetchProjects();
-        } catch (error) {
-            console.error(error);
-            alert('Error al crear proyecto');
-        }
+    const handleProjectCreated = async (createdId: number, warning?: string) => {
+        await fetchProjects();
+        setLogs([]);
+        setIsEditingEnv(false);
+        setSelectedProjectId(createdId);
+        setNotice(warning || 'Project created and systemd service configured.');
     };
 
     return (
@@ -155,11 +148,26 @@ export function Projects() {
                     <h2 className="text-3xl font-bold text-aeros-blue tracking-widest mb-2">ACTIVE_PROJECTS</h2>
                     <p className="text-gray-400 font-mono">Manage deployments and systemd services.</p>
                 </div>
-                <button onClick={handleNewProject} className="border border-aeros-gray text-white bg-transparent hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer flex items-center px-4 py-2 font-mono text-sm">
+                <button
+                    onClick={() => setIsNewModalOpen(true)}
+                    className="border border-aeros-gray text-white bg-transparent hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer flex items-center px-4 py-2 font-mono text-sm"
+                >
                     <Plus size={16} className="mr-2" />
                     NEW_PROJECT
                 </button>
             </header>
+
+            {notice && (
+                <div className="mb-4 px-4 py-2.5 border border-aeros-blue/50 bg-[#001422] text-xs text-gray-200 font-mono flex justify-between items-center">
+                    <span>{notice}</span>
+                    <button
+                        onClick={() => setNotice(null)}
+                        className="text-gray-400 hover:text-white bg-transparent border-0 cursor-pointer ml-4"
+                    >
+                        <X size={14} />
+                    </button>
+                </div>
+            )}
 
             <div className="flex gap-6 flex-1 min-h-0">
                 <div className="w-1/3 terminal-card border-aeros-gray overflow-y-auto !p-6 bg-[#050505]">
@@ -179,9 +187,16 @@ export function Projects() {
                                         {p.status.toUpperCase()}
                                     </span>
                                 </div>
-                                <div className="text-xs text-gray-400 flex justify-between font-mono">
+                                <div className="text-xs text-gray-400 flex justify-between items-center font-mono">
                                     <span>{p.service_name}</span>
-                                    {p.autostart ? <span className="text-aeros-purple font-bold">AUTOSTART</span> : null}
+                                    <div className="flex items-center gap-2">
+                                        {p.template && (
+                                            <span className="text-[10px] px-1.5 py-0.5 border border-aeros-gray text-aeros-blue uppercase">
+                                                {p.template}
+                                            </span>
+                                        )}
+                                        {p.autostart ? <span className="text-aeros-purple font-bold">AUTOSTART</span> : null}
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -248,6 +263,13 @@ export function Projects() {
                                 )}
                             </header>
 
+                            <div className="px-4 py-2 border-b border-aeros-gray bg-black text-[11px] text-gray-400 font-mono flex flex-wrap gap-x-4 gap-y-1">
+                                <span>UNIT: <span className="text-gray-200">{selectedProject.service_name}.service</span></span>
+                                {selectedProject.work_dir && <span>DIR: <span className="text-gray-200">{selectedProject.work_dir}</span></span>}
+                                {selectedProject.branch && <span>BRANCH: <span className="text-aeros-blue">{selectedProject.branch}</span></span>}
+                                {selectedProject.memory_max && <span>RAM_CAP: <span className="text-aeros-purple">{selectedProject.memory_max}</span></span>}
+                            </div>
+
                             {isEditingEnv ? (
                                 <div className="flex-1 p-4 bg-black flex flex-col">
                                     <div className="text-gray-400 text-xs mb-2 font-mono"># Configura las variables de entorno para {selectedProject.name}</div>
@@ -276,6 +298,12 @@ export function Projects() {
                     )}
                 </div>
             </div>
+
+            <NewProjectModal
+                isOpen={isNewModalOpen}
+                onClose={() => setIsNewModalOpen(false)}
+                onCreated={handleProjectCreated}
+            />
         </div>
     );
 }

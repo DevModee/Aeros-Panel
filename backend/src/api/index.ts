@@ -3,14 +3,29 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { getSystemMetrics } from '../system/sensors';
-import { startService, stopService, restartService, enableService, disableService, getServiceStatus } from '../system/systemd';
+import {
+    startService,
+    stopService,
+    restartService,
+    enableService,
+    disableService,
+    getServiceStatus,
+    writeSystemdUnit,
+    removeSystemdUnit
+} from '../system/systemd';
+import {
+    PROJECT_TEMPLATES,
+    generateSystemdUnit,
+    getTemplateById,
+    type TemplateId
+} from '../system/templates';
 import { db } from '../database/db';
 import { authRouter } from './auth';
 import { requireAuth } from '../auth/session';
 
 export const apiRouter = Router();
 
-const SERVICE_NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const BRANCH_PATTERN = /^[a-zA-Z0-9._/-]{1,120}$/;
 
 // Unauthenticated endpoints
 apiRouter.get('/health', (_req, res) => {
@@ -34,6 +49,38 @@ apiRouter.get('/system/metrics', async (_req, res) => {
     }
 });
 
+apiRouter.get('/templates', (_req, res) => {
+    res.json(PROJECT_TEMPLATES);
+});
+
+apiRouter.post('/templates/preview', (req, res) => {
+    try {
+        const {
+            name = 'My Service',
+            service_name = 'my-service',
+            template = 'node',
+            work_dir,
+            exec_start,
+            run_user,
+            memory_max
+        } = req.body || {};
+
+        const result = generateSystemdUnit({
+            name: String(name),
+            serviceName: String(service_name),
+            template: String(template) as TemplateId,
+            workDir: work_dir ? String(work_dir) : undefined,
+            execStart: exec_start ? String(exec_start) : undefined,
+            runUser: run_user ? String(run_user) : undefined,
+            memoryMax: memory_max ? String(memory_max) : undefined
+        });
+
+        res.json(result);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
 apiRouter.get('/projects', async (_req, res) => {
     try {
         const projects = await db('projects').select('*');
@@ -52,30 +99,84 @@ apiRouter.get('/projects', async (_req, res) => {
 apiRouter.post('/projects', async (req, res) => {
     try {
         const name = String(req.body?.name || '').trim();
-        const service_name = String(req.body?.service_name || '').trim().toLowerCase();
+        const serviceNameRaw = String(req.body?.service_name || '').trim().toLowerCase();
         const repository = req.body?.repository ? String(req.body.repository).trim() : null;
         const branch = String(req.body?.branch || 'main').trim();
+        const templateId = String(req.body?.template || 'custom') as TemplateId;
+        const tpl = getTemplateById(templateId);
+        const buildCmd = req.body?.build_cmd !== undefined
+            ? String(req.body.build_cmd).trim()
+            : tpl.defaultBuildCmd;
+        const createUnit = req.body?.create_unit !== false;
 
-        if (!name || !service_name) {
-            res.status(400).json({ error: 'Project name and service_name are required' });
+        if (!BRANCH_PATTERN.test(branch)) {
+            res.status(400).json({ error: 'Invalid git branch name.' });
             return;
         }
 
-        if (!SERVICE_NAME_PATTERN.test(service_name)) {
-            res.status(400).json({
-                error: 'Invalid service_name. Use lowercase letters, numbers, dots, underscores, or hyphens.'
-            });
-            return;
-        }
+        const { config, unitContent } = generateSystemdUnit({
+            name,
+            serviceName: serviceNameRaw,
+            template: tpl.id,
+            workDir: req.body?.work_dir ? String(req.body.work_dir) : undefined,
+            execStart: req.body?.exec_start ? String(req.body.exec_start) : undefined,
+            runUser: req.body?.run_user ? String(req.body.run_user) : undefined,
+            memoryMax: req.body?.memory_max ? String(req.body.memory_max) : undefined
+        });
 
         const [id] = await db('projects').insert({
-            name,
-            service_name,
+            name: config.name,
+            service_name: config.serviceName,
             repository,
             branch,
-            autostart: 0
+            autostart: 0,
+            template: config.template,
+            work_dir: config.workDir,
+            exec_start: config.execStart,
+            build_cmd: buildCmd || null,
+            run_user: config.runUser || null,
+            memory_max: config.memoryMax || null
         });
-        res.status(201).json({ id, success: true });
+
+        let unitResult: { installed: boolean; unitPath: string; warning?: string } = {
+            installed: false,
+            unitPath: `/etc/systemd/system/${config.serviceName}.service`
+        };
+
+        if (createUnit) {
+            if (process.platform === 'linux') {
+                try {
+                    fs.mkdirSync(config.workDir, { recursive: true });
+                } catch {}
+            }
+            unitResult = await writeSystemdUnit(config.serviceName, unitContent);
+        }
+
+        res.status(201).json({
+            id,
+            success: true,
+            unit: {
+                ...unitResult,
+                content: unitContent
+            }
+        });
+    } catch (error: any) {
+        const isValidation = error.message?.includes('Invalid') || error.message?.includes('required') || error.message?.includes('Working directory');
+        res.status(isValidation ? 400 : 500).json({ error: error.message });
+    }
+});
+
+apiRouter.delete('/projects/:id', async (req, res) => {
+    try {
+        const project = await db('projects').where('id', req.params.id).first();
+        if (!project) return res.status(404).json({ error: 'Not found' });
+
+        if (req.query.removeUnit === '1') {
+            await removeSystemdUnit(project.service_name);
+        }
+
+        await db('projects').where('id', req.params.id).del();
+        res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

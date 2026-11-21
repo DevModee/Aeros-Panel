@@ -14,6 +14,27 @@ export const db = knex({
     useNullAsDefault: true
 });
 
+async function ensureProjectColumns() {
+    const columns: Array<{ name: string; add: (table: knex.Knex.AlterTableBuilder) => void }> = [
+        { name: 'template', add: (t) => t.string('template').defaultTo('custom') },
+        { name: 'work_dir', add: (t) => t.string('work_dir').nullable() },
+        { name: 'exec_start', add: (t) => t.string('exec_start').nullable() },
+        { name: 'build_cmd', add: (t) => t.string('build_cmd').nullable() },
+        { name: 'run_user', add: (t) => t.string('run_user').nullable() },
+        { name: 'memory_max', add: (t) => t.string('memory_max').nullable() },
+        { name: 'last_deploy_at', add: (t) => t.string('last_deploy_at').nullable() }
+    ];
+
+    for (const col of columns) {
+        const exists = await db.schema.hasColumn('projects', col.name);
+        if (!exists) {
+            await db.schema.alterTable('projects', (table) => {
+                col.add(table);
+            });
+        }
+    }
+}
+
 export async function initializeDatabase() {
     const hasUsersTable = await db.schema.hasTable('users');
     if (!hasUsersTable) {
@@ -54,7 +75,16 @@ export async function initializeDatabase() {
             table.boolean('autostart').defaultTo(false);
             table.boolean('use_tailscale').defaultTo(false);
             table.text('env_vars').nullable();
+            table.string('template').defaultTo('custom');
+            table.string('work_dir').nullable();
+            table.string('exec_start').nullable();
+            table.string('build_cmd').nullable();
+            table.string('run_user').nullable();
+            table.string('memory_max').nullable();
+            table.string('last_deploy_at').nullable();
         });
+    } else {
+        await ensureProjectColumns();
     }
 
     // Optional headless admin bootstrap via environment variable
