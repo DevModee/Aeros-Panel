@@ -73,7 +73,7 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
     }
 ];
 
-export const SERVICE_NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+export const SERVICE_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
 const USER_PATTERN = /^[a-z_][a-z0-9_-]{0,31}$/;
 const MEMORY_MAX_PATTERN = /^\d+[KMG]?$/i;
 
@@ -144,14 +144,14 @@ export function validateUnitConfig(input: SystemdUnitConfig): {
     memoryMax: string;
 } {
     const name = sanitizeSingleLine(input.name);
-    const serviceName = input.serviceName.trim().toLowerCase();
+    const serviceName = input.serviceName.trim();
     const tpl = getTemplateById(input.template);
 
     if (!name) {
         throw new Error('Project name is required');
     }
     if (!SERVICE_NAME_PATTERN.test(serviceName)) {
-        throw new Error('Invalid service_name. Use lowercase letters, numbers, dots, underscores, or hyphens.');
+        throw new Error('Invalid service_name. Use letters, numbers, dots, underscores, or hyphens.');
     }
     if (isReservedServiceName(serviceName)) {
         throw new Error(`Service name "${serviceName}" is reserved for system services.`);

@@ -111,13 +111,13 @@ export function ServerInfo() {
                         <div className="flex justify-between items-center border-b border-aeros-gray pb-2">
                             <span className="text-gray-500">IPV4_LOCAL</span>
                             <div className="flex items-center gap-2">
-                                <span>{showIp ? (info?.ipv4 || '192.168.18.14') : '***.***.***.***'}</span>
+                                <span>{showIp ? (info?.ipv4 || 'UNKNOWN') : '***.***.***.***'}</span>
                                 <button onClick={() => setShowIp(!showIp)} className="text-gray-500 hover:text-aeros-blue bg-transparent border-0 p-0 cursor-pointer" title={showIp ? 'Hide IPs' : 'Reveal IPs'}>
                                     {showIp ? <EyeOff size={16} /> : <Eye size={16} />}
                                 </button>
                             </div>
                         </div>
-                        <div className="flex justify-between border-b border-aeros-gray pb-2"><span className="text-gray-500">MAC</span><span>{info?.mac || '00:1A:2B:3C:4D:5E'}</span></div>
+                        <div className="flex justify-between border-b border-aeros-gray pb-2"><span className="text-gray-500">MAC</span><span>{showIp ? (info?.mac || 'UNKNOWN') : '**:**:**:**:**:**'}</span></div>
                         <div className="flex justify-between border-b border-aeros-gray pb-2"><span className="text-gray-500">FIREWALL</span><span className="text-green-500">ACTIVE</span></div>
                         <div className="flex justify-between"><span className="text-gray-500">PANEL_PORT</span><span>{info?.panelPort || 3000}</span></div>
                     </div>

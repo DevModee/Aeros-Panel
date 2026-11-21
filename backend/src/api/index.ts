@@ -144,7 +144,7 @@ apiRouter.get('/projects', async (_req, res) => {
 apiRouter.post('/projects', async (req, res) => {
     try {
         const name = String(req.body?.name || '').trim();
-        const serviceNameRaw = String(req.body?.service_name || '').trim().toLowerCase();
+        const serviceNameRaw = String(req.body?.service_name || '').trim();
         const rawRepository = req.body?.repository ? String(req.body.repository).trim() : '';
         const rawBranch = String(req.body?.branch || 'main').trim();
         const templateId = String(req.body?.template || 'custom') as TemplateId;

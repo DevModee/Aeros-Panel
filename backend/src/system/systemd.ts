@@ -4,7 +4,7 @@ import path from 'path';
 import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
-const SERVICE_NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const SERVICE_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
 const SYSTEMD_DIR = '/etc/systemd/system';
 
 const RESERVED_SERVICE_NAMES = new Set([

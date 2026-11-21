@@ -4,7 +4,7 @@ import { Server } from 'http';
 import { getSessionTokenFromRequest, validateSessionToken } from '../auth/session';
 import { isRequestOriginAllowed } from '../auth/origin';
 
-const SERVICE_NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const SERVICE_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
 const serviceSubscribers = new Map<string, Set<WebSocket>>();
 
 export function broadcastServiceLog(serviceName: string, message: string): void {
