@@ -20,6 +20,7 @@ import {
     type TemplateId
 } from '../system/templates';
 import { deployProject, isDeployRunning } from '../system/deploy';
+import { getRemoteAccessInfo } from '../system/remote';
 import { db } from '../database/db';
 import { authRouter } from './auth';
 import { requireAuth } from '../auth/session';
@@ -306,6 +307,8 @@ apiRouter.get('/system/info', async (_req, res) => {
         } catch {}
 
         const cpus = os.cpus();
+        const panelPort = Number(process.env.PORT) || 3000;
+        const remoteAccess = await getRemoteAccessInfo(panelPort);
         const info = {
             hostname: os.hostname(),
             os: osName,
@@ -316,7 +319,9 @@ apiRouter.get('/system/info', async (_req, res) => {
             memory: os.totalmem(),
             ipv4,
             mac,
-            storageTotal
+            storageTotal,
+            panelPort,
+            remoteAccess
         };
         res.json(info);
     } catch (error: any) {
