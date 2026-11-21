@@ -108,8 +108,8 @@ export function Settings() {
             setPasswordMessage({ ok: false, text: 'New passwords do not match.' });
             return;
         }
-        if (newPassword.length < 6) {
-            setPasswordMessage({ ok: false, text: 'New password must be at least 6 characters.' });
+        if (newPassword.length < 10) {
+            setPasswordMessage({ ok: false, text: 'New password must be at least 10 characters.' });
             return;
         }
 
@@ -272,10 +272,11 @@ export function Settings() {
                                 <input
                                     type="password"
                                     required
-                                    minLength={6}
+                                    minLength={10}
                                     autoComplete="new-password"
                                     value={newPassword}
                                     onChange={(e) => setNewPassword(e.target.value)}
+                                    placeholder="Min. 10 characters"
                                     className="bg-[#0a0a0a] border border-aeros-gray px-3 py-2 text-white focus:border-aeros-blue outline-none font-mono"
                                 />
                             </div>
@@ -284,10 +285,11 @@ export function Settings() {
                                 <input
                                     type="password"
                                     required
-                                    minLength={6}
+                                    minLength={10}
                                     autoComplete="new-password"
                                     value={confirmPassword}
                                     onChange={(e) => setConfirmPassword(e.target.value)}
+                                    placeholder="Min. 10 characters"
                                     className="bg-[#0a0a0a] border border-aeros-gray px-3 py-2 text-white focus:border-aeros-blue outline-none font-mono"
                                 />
                             </div>

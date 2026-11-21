@@ -28,8 +28,8 @@ export function Login({ setupRequired, onAuthenticated }: LoginProps) {
             return;
         }
 
-        if (password.length < 6) {
-            setError('Password must be at least 6 characters.');
+        if (setupRequired && password.length < 10) {
+            setError('Password must be at least 10 characters.');
             return;
         }
 
@@ -112,8 +112,8 @@ export function Login({ setupRequired, onAuthenticated }: LoginProps) {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
-                            minLength={6}
-                            placeholder="••••••••"
+                            minLength={setupRequired ? 10 : 1}
+                            placeholder={setupRequired ? 'Min. 10 characters' : '••••••••'}
                             className="bg-[#0a0a0a] border border-aeros-gray px-3 py-2.5 text-sm text-white focus:border-aeros-blue outline-none font-mono"
                         />
                     </div>
@@ -130,8 +130,8 @@ export function Login({ setupRequired, onAuthenticated }: LoginProps) {
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 required
-                                minLength={6}
-                                placeholder="••••••••"
+                                minLength={10}
+                                placeholder="Min. 10 characters"
                                 className="bg-[#0a0a0a] border border-aeros-gray px-3 py-2.5 text-sm text-white focus:border-aeros-blue outline-none font-mono"
                             />
                         </div>

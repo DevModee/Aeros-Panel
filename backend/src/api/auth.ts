@@ -19,6 +19,14 @@ import {
 export const authRouter = Router();
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_-]{3,32}$/;
+const MIN_PASSWORD_LENGTH = 10;
+
+class SetupAlreadyCompleteError extends Error {
+    constructor() {
+        super('Admin account is already configured');
+        this.name = 'SetupAlreadyCompleteError';
+    }
+}
 
 async function getUserCount(): Promise<number> {
     const result = await db('users').count<{ count: number | string }>('id as count').first();
@@ -43,12 +51,6 @@ authRouter.get('/status', async (req, res) => {
 
 authRouter.post('/setup', async (req, res) => {
     try {
-        const userCount = await getUserCount();
-        if (userCount > 0) {
-            res.status(409).json({ error: 'Admin account is already configured' });
-            return;
-        }
-
         const username = String(req.body?.username || 'admin').trim();
         const password = String(req.body?.password || '');
 
@@ -57,16 +59,29 @@ authRouter.post('/setup', async (req, res) => {
             return;
         }
 
-        if (password.length < 6) {
-            res.status(400).json({ error: 'Password must be at least 6 characters' });
+        if (password.length < MIN_PASSWORD_LENGTH) {
+            res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+            return;
+        }
+
+        if (await getUserCount() > 0) {
+            res.status(409).json({ error: 'Admin account is already configured' });
             return;
         }
 
         const passwordHash = await hashPassword(password);
-        const [userId] = await db('users').insert({
-            username,
-            password: passwordHash,
-            created_at: Date.now()
+        const userId = await db.transaction(async (trx) => {
+            const countRow = await trx('users').count<{ count: number | string }>('id as count').first();
+            if (Number(countRow?.count ?? 0) > 0) {
+                throw new SetupAlreadyCompleteError();
+            }
+
+            const [insertedId] = await trx('users').insert({
+                username,
+                password: passwordHash,
+                created_at: Date.now()
+            });
+            return insertedId;
         });
 
         const { token, expiresAt } = await createSession(userId);
@@ -77,6 +92,10 @@ authRouter.post('/setup', async (req, res) => {
             user: { id: userId, username }
         });
     } catch (error: any) {
+        if (error instanceof SetupAlreadyCompleteError) {
+            res.status(409).json({ error: error.message });
+            return;
+        }
         res.status(500).json({ error: error.message });
     }
 });
@@ -144,8 +163,8 @@ authRouter.post('/password', requireAuth, async (req: AuthenticatedRequest, res)
         const currentPassword = String(req.body?.currentPassword || '');
         const newPassword = String(req.body?.newPassword || '');
 
-        if (newPassword.length < 6) {
-            res.status(400).json({ error: 'New password must be at least 6 characters' });
+        if (newPassword.length < MIN_PASSWORD_LENGTH) {
+            res.status(400).json({ error: `New password must be at least ${MIN_PASSWORD_LENGTH} characters` });
             return;
         }
 

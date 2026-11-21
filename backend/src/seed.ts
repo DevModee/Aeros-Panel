@@ -13,8 +13,8 @@ async function main() {
         process.exit(1);
     }
 
-    if (password.length < 6) {
-        console.error('Password must be at least 6 characters.');
+    if (password.length < 10) {
+        console.error('Password must be at least 10 characters.');
         process.exit(1);
     }
 

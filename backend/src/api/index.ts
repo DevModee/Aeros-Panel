@@ -113,7 +113,22 @@ apiRouter.post('/templates/preview', (req, res) => {
 
 apiRouter.get('/projects', async (_req, res) => {
     try {
-        const projects = await db('projects').select('*');
+        const projects = await db('projects').select(
+            'id',
+            'name',
+            'service_name',
+            'repository',
+            'branch',
+            'autostart',
+            'use_tailscale',
+            'template',
+            'work_dir',
+            'exec_start',
+            'build_cmd',
+            'run_user',
+            'memory_max',
+            'last_deploy_at'
+        );
 
         const projectsWithStatus = await Promise.all(projects.map(async (p) => {
             const status = await getServiceStatus(p.service_name);
@@ -293,20 +308,43 @@ apiRouter.post('/projects/:id/autostart', async (req, res) => {
     }
 });
 
+apiRouter.get('/projects/:id/env', async (req, res) => {
+    try {
+        const project = await db('projects')
+            .where('id', req.params.id)
+            .select('id', 'env_vars')
+            .first();
+        if (!project) return res.status(404).json({ error: 'Not found' });
+
+        res.setHeader('Cache-Control', 'no-store');
+        res.json({ env_vars: project.env_vars || '' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 apiRouter.post('/projects/:id/env', async (req, res) => {
     try {
-        const { env_vars } = req.body;
+        const envVars = typeof req.body?.env_vars === 'string' ? req.body.env_vars : '';
         const project = await db('projects').where('id', req.params.id).first();
         if (!project) return res.status(404).json({ error: 'Not found' });
 
-        await db('projects').where('id', req.params.id).update({ env_vars });
-
-        // Write physical .env file on the server if directory exists
-        const projectDir = validateWorkDir(project.work_dir || `/opt/${project.service_name}`);
-        if (fs.existsSync(projectDir)) {
-            fs.writeFileSync(path.join(projectDir, '.env'), env_vars || '', { mode: 0o600 });
+        let projectDir: string;
+        try {
+            projectDir = validateWorkDir(project.work_dir || `/opt/${project.service_name}`);
+        } catch (validationError: any) {
+            res.status(400).json({ error: validationError.message });
+            return;
         }
 
+        await db('projects').where('id', req.params.id).update({ env_vars: envVars });
+
+        // Write physical .env file on the server if directory exists
+        if (fs.existsSync(projectDir)) {
+            fs.writeFileSync(path.join(projectDir, '.env'), envVars, { mode: 0o600 });
+        }
+
+        res.setHeader('Cache-Control', 'no-store');
         res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ error: error.message });

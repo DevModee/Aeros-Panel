@@ -23,7 +23,6 @@ interface Project {
     branch: string;
     status: string;
     autostart: number;
-    env_vars: string | null;
     template?: string;
     work_dir?: string | null;
     memory_max?: string | null;
@@ -36,6 +35,7 @@ export function Projects() {
     const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
     const [logs, setLogs] = useState<string[]>([]);
     const [isEditingEnv, setIsEditingEnv] = useState(false);
+    const [loadingEnv, setLoadingEnv] = useState(false);
     const [envContent, setEnvContent] = useState('');
     const [isNewModalOpen, setIsNewModalOpen] = useState(false);
     const [deployingService, setDeployingService] = useState<string | null>(null);
@@ -151,24 +151,38 @@ export function Projects() {
         }
     };
 
-    const openEnvEditor = () => {
+    const openEnvEditor = async () => {
         if (!selectedProject) return;
-        setEnvContent(selectedProject.env_vars || '');
+        setNotice(null);
+        setLoadingEnv(true);
+        setEnvContent('');
         setIsEditingEnv(true);
         if (wsRef.current) wsRef.current.close();
+
+        try {
+            const data = await apiFetch<{ env_vars: string }>(`/api/projects/${selectedProject.id}/env`);
+            setEnvContent(data.env_vars || '');
+        } catch (error) {
+            const message = error instanceof ApiError ? error.message : 'Failed to load .env secrets.';
+            setNotice(message);
+            setIsEditingEnv(false);
+        } finally {
+            setLoadingEnv(false);
+        }
     };
 
     const saveEnv = async () => {
-        if (!selectedProject) return;
+        if (!selectedProject || loadingEnv) return;
         try {
             await apiFetch(`/api/projects/${selectedProject.id}/env`, {
                 method: 'POST',
                 body: JSON.stringify({ env_vars: envContent })
             });
-            await fetchProjects();
+            setEnvContent('');
             setIsEditingEnv(false);
         } catch (error) {
-            console.error(error);
+            const message = error instanceof ApiError ? error.message : 'Failed to save .env file.';
+            setNotice(message);
         }
     };
 
@@ -328,10 +342,15 @@ export function Projects() {
 
                             {isEditingEnv ? (
                                 <div className="flex-1 p-4 bg-black flex flex-col">
-                                    <div className="text-gray-400 text-xs mb-2 font-mono"># Configura las variables de entorno para {selectedProject.name}</div>
+                                    <div className="text-gray-400 text-xs mb-2 font-mono">
+                                        {loadingEnv
+                                            ? `# Loading environment variables for ${selectedProject.name}...`
+                                            : `# Configura las variables de entorno para ${selectedProject.name}`}
+                                    </div>
                                     <textarea
-                                        className="flex-1 w-full bg-[#0a0a0a] text-aeros-text p-4 font-mono text-sm border border-aeros-gray focus:border-aeros-purple outline-none resize-none"
+                                        className="flex-1 w-full bg-[#0a0a0a] text-aeros-text p-4 font-mono text-sm border border-aeros-gray focus:border-aeros-purple outline-none resize-none disabled:opacity-50"
                                         value={envContent}
+                                        disabled={loadingEnv}
                                         onChange={(e) => setEnvContent(e.target.value)}
                                         placeholder="TOKEN=your_token_here&#10;PORT=8080"
                                         spellCheck="false"
