@@ -12,14 +12,15 @@ A zero-overhead, native Linux control panel designed for low-resource hardware, 
 ![Projects List](docs/projects-list.png)
 ![Terminal](docs/projects-terminal.png)
 ![Server Info](docs/server-info.png)
+![Settings](docs/settings.png)
 
 ---
 
-## Why AerosPanel? (Idle Footprint Comparison)
+## Why AerosPanel? (Real Measured Idle Footprint)
 
-| Feature | **AerosPanel** | Docker + Portainer | Coolify | Pterodactyl |
+| Feature | **AerosPanel (measured)** | Docker + Portainer | Coolify | Pterodactyl |
 | :--- | :--- | :--- | :--- | :--- |
-| **Typical Idle RAM** | **~35–55 MB** (single process) | ~250–450 MB (`dockerd` + container) | ~1.5–2.5 GB+ (Docker + DB + proxy) | ~600 MB–1.2 GB (Panel + Wings + DB + Redis) |
+| **Idle RAM** | **27.1 MB** cgroup (`~61 MB` total RSS, 1 process) | ~250–450 MB (`dockerd` + container) | ~1.5–2.5 GB+ (Docker + DB + proxy) | ~600 MB–1.2 GB (Panel + Wings + DB + Redis) |
 | **Docker Required** | **No (Zero Docker)** | Yes | Yes | Yes |
 | **Background Polling Daemons** | **None (on-demand only)** | Yes | Yes | Yes |
 | **Native `systemd` Services** | **Yes (1-click templates)** | No | No | No |
@@ -27,7 +28,7 @@ A zero-overhead, native Linux control panel designed for low-resource hardware, 
 | **1-Click Git Deploy + Live Logs** | **Yes (WebSocket terminal)** | Manual / GitOps add-on | Yes | Manual |
 | **Ideal Hardware** | **Old Celeron, 2–4 GB RAM laptop, small VPS** | Mid-range homelab | 4+ GB RAM VPS | Dedicated game server |
 
-> Verify the real footprint on your own box anytime with `systemctl status aeros-panel` (look at the `Memory:` line).
+> **Real measurement:** Tested on an **Intel Celeron N3060 @ 1.60GHz** (4 GB RAM, Debian 13 trixie, Node.js v20, managing 8 `systemd` services): `systemctl status aeros-panel` reports **27.1 MB** idle cgroup memory (peak **34.7 MB**, 11 tasks, 1 process), `RssAnon` **17.8 MB**, and `ps` total RSS **61 MB** (including shared Node binary pages). Verify on your own machine anytime with `systemctl status aeros-panel`.
 
 ---
 
