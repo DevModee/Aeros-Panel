@@ -105,11 +105,11 @@ export function Dashboard() {
                         <HardDrive className="mr-4" size={22} />
                         SYSTEM_COMMANDS
                     </div>
-                    <div className="p-4 grid grid-cols-2 gap-4 mt-auto">
-                        <button className="w-full bg-transparent border border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer text-xs p-2 font-mono">REBOOT_SYS</button>
-                        <button className="w-full bg-transparent border border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer text-xs p-2 font-mono">PANEL_RESTART</button>
-                        <button className="w-full bg-transparent border border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer text-xs p-2 font-mono">CLEAR_CACHE</button>
-                        <button className="w-full bg-transparent border border-error-color text-error-color hover:bg-error-color hover:text-white transition-colors cursor-pointer text-xs p-2 font-mono">EMERGENCY_STOP</button>
+                    <div className="p-2 grid grid-cols-2 gap-3 mt-auto">
+                        <button className="w-full bg-transparent border border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer text-[11px] px-2 py-2.5 font-mono whitespace-nowrap">REBOOT_SYS</button>
+                        <button className="w-full bg-transparent border border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer text-[11px] px-2 py-2.5 font-mono whitespace-nowrap">PANEL_RESTART</button>
+                        <button className="w-full bg-transparent border border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer text-[11px] px-2 py-2.5 font-mono whitespace-nowrap">CLEAR_CACHE</button>
+                        <button className="w-full bg-transparent border border-error-color text-error-color hover:bg-error-color hover:text-white transition-colors cursor-pointer text-[11px] px-2 py-2.5 font-mono whitespace-nowrap">EMERGENCY_STOP</button>
                     </div>
                 </div>
             </div>

@@ -267,63 +267,63 @@ export function Projects() {
                 <div className="w-2/3 terminal-card border-aeros-gray flex flex-col">
                     {selectedProject ? (
                         <>
-                            <header className="flex justify-between items-center gap-2 flex-wrap">
-                                <span className="text-aeros-blue font-bold font-mono">
+                            <header className="flex justify-between items-center gap-2 flex-wrap px-4 py-3 border-b border-aeros-gray bg-[#0a0a0a]">
+                                <span className="text-aeros-blue font-bold font-mono text-sm">
                                     {selectedProject.name} // {isEditingEnv ? 'EDIT_ENV' : 'TERMINAL'}
                                 </span>
                                 {!isEditingEnv ? (
-                                    <div className="flex gap-2 flex-wrap">
+                                    <div className="flex gap-1.5 items-center flex-wrap">
                                         <button
                                             onClick={handleDeploy}
                                             disabled={isSelectedDeploying}
-                                            className="btn btn-default py-1 px-2 text-xs flex items-center bg-transparent border-aeros-blue text-aeros-blue hover:bg-aeros-blue hover:text-black cursor-pointer disabled:opacity-50"
+                                            className="py-1.5 px-2.5 text-xs font-mono flex items-center bg-transparent border border-aeros-blue text-aeros-blue hover:bg-aeros-blue hover:text-black transition-colors cursor-pointer disabled:opacity-50"
                                             title="Git pull, build if needed, and restart service"
                                         >
-                                            <Rocket size={14} className={`mr-2 ${isSelectedDeploying ? 'animate-pulse' : ''}`} />
+                                            <Rocket size={13} className={`mr-1.5 ${isSelectedDeploying ? 'animate-pulse' : ''}`} />
                                             {isSelectedDeploying ? 'DEPLOYING...' : 'DEPLOY'}
                                         </button>
                                         <button
                                             onClick={() => setLogs([])}
-                                            className="btn btn-default py-1 px-2 text-xs flex items-center bg-transparent border-aeros-gray hover:border-error-color hover:text-error-color cursor-pointer text-gray-500"
+                                            className="py-1.5 px-2.5 text-xs font-mono flex items-center bg-transparent border border-aeros-gray hover:border-error-color hover:text-error-color transition-colors cursor-pointer text-gray-400"
                                             title="Clear Terminal"
                                         >
-                                            <Trash2 size={14} className="mr-2" />
+                                            <Trash2 size={13} className="mr-1.5" />
                                             CLEAR
                                         </button>
                                         <button
                                             onClick={openEnvEditor}
-                                            className="btn btn-default py-1 px-2 text-xs flex items-center bg-transparent border-aeros-gray hover:border-aeros-blue hover:text-aeros-blue cursor-pointer"
+                                            className="py-1.5 px-2.5 text-xs font-mono flex items-center bg-transparent border border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer"
                                             title="Edit .env"
                                         >
-                                            <FileText size={14} className="mr-2" />
+                                            <FileText size={13} className="mr-1.5" />
                                             .env
                                         </button>
                                         <button
                                             onClick={toggleAutostart}
-                                            className={`btn btn-default py-1 px-2 text-xs flex items-center bg-transparent cursor-pointer ${selectedProject.autostart ? 'border-aeros-purple text-aeros-purple hover:bg-aeros-purple hover:text-white' : 'border-aeros-gray hover:border-aeros-purple hover:text-aeros-purple'}`}
+                                            className={`py-1.5 px-2.5 text-xs font-mono flex items-center bg-transparent border transition-colors cursor-pointer ${selectedProject.autostart ? 'border-aeros-purple text-aeros-purple hover:bg-aeros-purple hover:text-white' : 'border-aeros-gray text-gray-300 hover:border-aeros-purple hover:text-aeros-purple'}`}
                                             title="Toggle Boot Autostart"
                                         >
-                                            <Power size={14} className="mr-2" />
+                                            <Power size={13} className="mr-1.5" />
                                             BOOT
                                         </button>
-                                        <button onClick={() => handleAction('start')} className="btn btn-default py-1 px-2 bg-transparent text-green-500 border-aeros-gray hover:border-green-500 cursor-pointer" title="Start"><Play size={14} /></button>
-                                        <button onClick={() => handleAction('restart')} className="btn btn-default py-1 px-2 bg-transparent text-yellow-500 border-aeros-gray hover:border-yellow-500 cursor-pointer" title="Restart"><RotateCw size={14} /></button>
-                                        <button onClick={() => handleAction('stop')} className="btn btn-default py-1 px-2 bg-transparent text-red-500 border-aeros-gray hover:border-red-500 cursor-pointer" title="Stop"><Square size={14} /></button>
+                                        <button onClick={() => handleAction('start')} className="p-1.5 bg-transparent text-green-500 border border-aeros-gray hover:border-green-500 transition-colors cursor-pointer" title="Start"><Play size={13} /></button>
+                                        <button onClick={() => handleAction('restart')} className="p-1.5 bg-transparent text-yellow-500 border border-aeros-gray hover:border-yellow-500 transition-colors cursor-pointer" title="Restart"><RotateCw size={13} /></button>
+                                        <button onClick={() => handleAction('stop')} className="p-1.5 bg-transparent text-red-500 border border-aeros-gray hover:border-red-500 transition-colors cursor-pointer" title="Stop"><Square size={13} /></button>
                                     </div>
                                 ) : (
                                     <div className="flex gap-2">
                                         <button
                                             onClick={() => setIsEditingEnv(false)}
-                                            className="btn btn-error py-1 px-2 text-xs flex items-center cursor-pointer bg-red-900 border-red-500 hover:bg-red-500 hover:text-white"
+                                            className="py-1.5 px-2.5 text-xs font-mono flex items-center cursor-pointer bg-transparent border border-red-500 text-red-400 hover:bg-red-500 hover:text-white transition-colors"
                                         >
-                                            <X size={14} className="mr-2" />
+                                            <X size={13} className="mr-1.5" />
                                             CANCEL
                                         </button>
                                         <button
                                             onClick={saveEnv}
-                                            className="btn btn-primary py-1 px-2 text-xs flex items-center cursor-pointer border-aeros-blue text-aeros-blue hover:bg-aeros-blue hover:text-white bg-transparent"
+                                            className="py-1.5 px-2.5 text-xs font-mono flex items-center cursor-pointer border border-aeros-blue text-aeros-blue hover:bg-aeros-blue hover:text-black bg-transparent transition-colors"
                                         >
-                                            <Save size={14} className="mr-2" />
+                                            <Save size={13} className="mr-1.5" />
                                             SAVE_ENV
                                         </button>
                                     </div>
