@@ -1,8 +1,8 @@
 # AerosPanel
 
-> **Turn your old PC (even a Celeron) into a real self-hosted server — without Docker eating your RAM.**
+A lightweight control panel to self-host apps on an old PC, without Docker.
 
-A zero-overhead, native Linux control panel designed for low-resource hardware, mini PCs, old laptops, and lean Debian/Ubuntu VPS nodes. Instead of running Docker daemons, reverse proxies, and background containers, **AerosPanel** runs as a single Node.js process that talks directly to Linux `/sys/class/` sensors, `systemctl`, and `journalctl` — leaving **0% extra overhead when idle**.
+It runs as a single Node.js process on Debian/Ubuntu and talks directly to Linux `/sys/class/` sensors, `systemctl`, and `journalctl`, with no background polling overhead when idle.
 
 ---
 
