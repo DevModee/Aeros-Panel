@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import { promisify } from 'util';
 import { getServiceStatus } from './systemd';
+import { detectCaddy, type CaddyInfo } from './caddy';
 
 const execFileAsync = promisify(execFile);
 
@@ -24,6 +25,7 @@ export interface CloudflareTunnelInfo {
 export interface RemoteAccessInfo {
     tailscale: TailscaleInfo;
     cloudflare: CloudflareTunnelInfo;
+    caddy: CaddyInfo;
 }
 
 function findTailscaleInterfaceIp(): string | null {
@@ -181,10 +183,11 @@ async function detectCloudflareTunnel(panelPort: number): Promise<CloudflareTunn
 }
 
 export async function getRemoteAccessInfo(panelPort: number): Promise<RemoteAccessInfo> {
-    const [tailscale, cloudflare] = await Promise.all([
+    const [tailscale, cloudflare, caddy] = await Promise.all([
         detectTailscale(panelPort),
-        detectCloudflareTunnel(panelPort)
+        detectCloudflareTunnel(panelPort),
+        detectCaddy()
     ]);
 
-    return { tailscale, cloudflare };
+    return { tailscale, cloudflare, caddy };
 }
