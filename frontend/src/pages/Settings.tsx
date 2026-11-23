@@ -1,10 +1,21 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { Radio, Save, Copy, Check, KeyRound, RefreshCw, Play } from 'lucide-react';
+import { useEffect, useState, useCallback, type FormEvent } from 'react';
+import { Radio, Save, Copy, Check, KeyRound, RefreshCw, Play, Archive, Plus, Trash2, Power } from 'lucide-react';
 import { apiFetch, ApiError } from '../lib/api';
 
 interface PublicStatusConfig {
     enabled: boolean;
     token: string;
+}
+
+interface BackupJob {
+    id: number;
+    name: string;
+    paths: string[];
+    schedule: string;
+    enabled: boolean;
+    status: 'active' | 'inactive';
+    destination: string;
+    created_at: number;
 }
 
 function generateRandomToken(): string {
@@ -28,6 +39,22 @@ export function Settings() {
     const [passwordMessage, setPasswordMessage] = useState<{ ok: boolean; text: string } | null>(null);
     const [savingPassword, setSavingPassword] = useState(false);
 
+    const [backupJobs, setBackupJobs] = useState<BackupJob[]>([]);
+    const [backupName, setBackupName] = useState('');
+    const [backupSchedule, setBackupSchedule] = useState('daily');
+    const [backupPathsText, setBackupPathsText] = useState('/opt/aeros-panel/backend/aeros.db');
+    const [backupMessage, setBackupMessage] = useState<{ ok: boolean; text: string } | null>(null);
+    const [savingBackup, setSavingBackup] = useState(false);
+
+    const fetchBackups = useCallback(async () => {
+        try {
+            const list = await apiFetch<BackupJob[]>('/api/backups');
+            setBackupJobs(list);
+        } catch (error) {
+            console.error(error);
+        }
+    }, []);
+
     useEffect(() => {
         let active = true;
         apiFetch<PublicStatusConfig>('/api/settings/public-status')
@@ -35,6 +62,12 @@ export function Settings() {
                 if (!active) return;
                 setEnabled(cfg.enabled);
                 setToken(cfg.token);
+            })
+            .catch((error) => console.error(error));
+
+        apiFetch<BackupJob[]>('/api/backups')
+            .then((list) => {
+                if (active) setBackupJobs(list);
             })
             .catch((error) => console.error(error));
 
@@ -130,6 +163,89 @@ export function Settings() {
             });
         } finally {
             setSavingPassword(false);
+        }
+    };
+
+    const handleCreateBackup = async (e: FormEvent) => {
+        e.preventDefault();
+        setBackupMessage(null);
+        const paths = backupPathsText
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+
+        if (!backupName.trim() || paths.length === 0) {
+            setBackupMessage({ ok: false, text: 'Provide a backup name and at least one absolute path.' });
+            return;
+        }
+
+        setSavingBackup(true);
+        try {
+            const created = await apiFetch<{ warning?: string }>('/api/backups', {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: backupName.trim(),
+                    schedule: backupSchedule,
+                    paths,
+                    enabled: true
+                })
+            });
+            setBackupName('');
+            await fetchBackups();
+            setBackupMessage({
+                ok: true,
+                text: created.warning || 'Backup timer created and enabled.'
+            });
+        } catch (err) {
+            setBackupMessage({
+                ok: false,
+                text: err instanceof ApiError ? err.message : 'Failed to create backup timer.'
+            });
+        } finally {
+            setSavingBackup(false);
+        }
+    };
+
+    const handleToggleBackup = async (job: BackupJob) => {
+        setBackupMessage(null);
+        try {
+            await apiFetch(`/api/backups/${job.id}/toggle`, {
+                method: 'POST',
+                body: JSON.stringify({ enabled: !job.enabled })
+            });
+            await fetchBackups();
+        } catch (err) {
+            setBackupMessage({
+                ok: false,
+                text: err instanceof ApiError ? err.message : 'Failed to update backup timer.'
+            });
+        }
+    };
+
+    const handleRunBackup = async (job: BackupJob) => {
+        setBackupMessage(null);
+        try {
+            await apiFetch(`/api/backups/${job.id}/run`, { method: 'POST' });
+            setBackupMessage({ ok: true, text: `Triggered backup job "${job.name}".` });
+        } catch (err) {
+            setBackupMessage({
+                ok: false,
+                text: err instanceof ApiError ? err.message : 'Failed to run backup job.'
+            });
+        }
+    };
+
+    const handleDeleteBackup = async (job: BackupJob) => {
+        setBackupMessage(null);
+        try {
+            await apiFetch(`/api/backups/${job.id}`, { method: 'DELETE' });
+            await fetchBackups();
+            setBackupMessage({ ok: true, text: `Removed backup timer "${job.name}".` });
+        } catch (err) {
+            setBackupMessage({
+                ok: false,
+                text: err instanceof ApiError ? err.message : 'Failed to remove backup timer.'
+            });
         }
     };
 
@@ -246,6 +362,143 @@ export function Settings() {
                         </div>
                     </div>
                 </form>
+
+                <div className="terminal-card border-aeros-gray !p-8 bg-[#050505]">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="text-aeros-blue flex items-center font-bold text-lg">
+                            <Archive className="mr-4 text-aeros-blue" size={22} />
+                            SYSTEMD_TIMER_BACKUPS
+                        </div>
+                        <span className="text-[11px] text-gray-500">ZERO IDLE RAM</span>
+                    </div>
+
+                    <p className="text-xs text-gray-400 mb-5 leading-relaxed">
+                        Generates native <span className="text-gray-200">Type=oneshot</span> systemd service + timer pairs
+                        that archive selected <span className="text-gray-200">.env</span> and SQLite files into{' '}
+                        <span className="text-aeros-blue">/var/backups/aeros-panel/</span> with <span className="text-gray-200">0600</span> permissions.
+                    </p>
+
+                    <form onSubmit={handleCreateBackup} className="space-y-4 text-xs mb-6 pb-6 border-b border-aeros-gray">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="flex flex-col">
+                                <label className="mb-1.5 text-gray-400">JOB_NAME</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={backupName}
+                                    onChange={(e) => setBackupName(e.target.value)}
+                                    placeholder="panel-db"
+                                    className="bg-[#0a0a0a] border border-aeros-gray px-3 py-2 text-white focus:border-aeros-blue outline-none font-mono"
+                                />
+                            </div>
+                            <div className="flex flex-col">
+                                <label className="mb-1.5 text-gray-400">ON_CALENDAR</label>
+                                <select
+                                    value={backupSchedule}
+                                    onChange={(e) => setBackupSchedule(e.target.value)}
+                                    className="bg-[#0a0a0a] border border-aeros-gray px-3 py-2 text-white focus:border-aeros-blue outline-none font-mono"
+                                >
+                                    <option value="daily">daily</option>
+                                    <option value="hourly">hourly</option>
+                                    <option value="weekly">weekly</option>
+                                    <option value="monthly">monthly</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col">
+                            <label className="mb-1.5 text-gray-400">TARGET_PATHS (ONE ABSOLUTE PATH PER LINE)</label>
+                            <textarea
+                                rows={3}
+                                value={backupPathsText}
+                                onChange={(e) => setBackupPathsText(e.target.value)}
+                                placeholder="/opt/aeros-panel/backend/aeros.db&#10;/opt/my-app/.env"
+                                className="bg-[#0a0a0a] border border-aeros-gray px-3 py-2 text-white focus:border-aeros-blue outline-none font-mono resize-y"
+                                spellCheck={false}
+                            />
+                        </div>
+
+                        {backupMessage && (
+                            <div className={backupMessage.ok ? 'text-green-400' : 'text-red-400'}>
+                                {backupMessage.text}
+                            </div>
+                        )}
+
+                        <button
+                            type="submit"
+                            disabled={savingBackup}
+                            className="px-4 py-2 border border-aeros-blue text-aeros-blue bg-transparent hover:bg-aeros-blue hover:text-black cursor-pointer font-bold flex items-center disabled:opacity-50"
+                        >
+                            <Plus size={14} className="mr-1.5" />
+                            {savingBackup ? 'CREATING...' : 'CREATE_BACKUP_TIMER'}
+                        </button>
+                    </form>
+
+                    <div className="space-y-3 text-xs">
+                        {backupJobs.map((job) => (
+                            <div
+                                key={job.id}
+                                className="border border-aeros-gray bg-black p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                            >
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-bold text-white">aeros-backup-{job.name}.timer</span>
+                                        <span className="px-1.5 py-0.5 border border-aeros-gray text-aeros-blue text-[10px]">
+                                            {job.schedule}
+                                        </span>
+                                        <span
+                                            className={`px-1.5 py-0.5 text-[10px] ${
+                                                job.enabled
+                                                    ? 'bg-green-900 text-green-400'
+                                                    : 'bg-aeros-gray text-gray-400'
+                                            }`}
+                                        >
+                                            {job.enabled ? 'ENABLED' : 'DISABLED'}
+                                        </span>
+                                    </div>
+                                    <div className="text-gray-400 truncate">
+                                        {job.paths.join(', ')}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleToggleBackup(job)}
+                                        className={`px-2.5 py-1 border bg-transparent cursor-pointer flex items-center ${
+                                            job.enabled
+                                                ? 'border-aeros-purple text-aeros-purple hover:bg-aeros-purple hover:text-white'
+                                                : 'border-aeros-gray text-gray-300 hover:border-green-500 hover:text-green-400'
+                                        }`}
+                                        title={job.enabled ? 'Disable timer' : 'Enable timer'}
+                                    >
+                                        <Power size={13} className="mr-1" />
+                                        {job.enabled ? 'DISABLE' : 'ENABLE'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRunBackup(job)}
+                                        className="px-2.5 py-1 border border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue bg-transparent cursor-pointer flex items-center"
+                                        title="Run backup oneshot now"
+                                    >
+                                        <Play size={13} className="mr-1" />
+                                        RUN
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleDeleteBackup(job)}
+                                        className="p-1.5 border border-aeros-gray text-gray-400 hover:border-red-500 hover:text-red-400 bg-transparent cursor-pointer"
+                                        title="Delete backup timer"
+                                    >
+                                        <Trash2 size={13} />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                        {backupJobs.length === 0 && (
+                            <div className="text-gray-500 text-center py-4">NO_BACKUP_TIMERS_CONFIGURED</div>
+                        )}
+                    </div>
+                </div>
 
                 <form onSubmit={handlePasswordUpdate} className="terminal-card border-aeros-gray !p-8 bg-[#050505]">
                     <div className="text-aeros-blue flex items-center mb-6 font-bold text-lg">
