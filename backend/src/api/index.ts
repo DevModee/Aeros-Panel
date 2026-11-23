@@ -24,6 +24,17 @@ import { validateGitBranch, validateRepositoryUrl } from '../system/git';
 import { deployProject, isDeployRunning } from '../system/deploy';
 import { getRemoteAccessInfo } from '../system/remote';
 import { applyCaddyRoute, detectCaddy, removeCaddyRoute } from '../system/caddy';
+import {
+    BACKUP_DIR,
+    getBackupTimerStatus,
+    removeBackupUnits,
+    runBackupNow,
+    setBackupTimerEnabled,
+    validateBackupName,
+    validateBackupPaths,
+    validateBackupSchedule,
+    writeBackupUnits
+} from '../system/backups';
 import { db } from '../database/db';
 import { getPublicStatusConfig, updatePublicStatusConfig } from '../database/settings';
 import { authRouter } from './auth';
@@ -384,6 +395,123 @@ apiRouter.delete('/projects/:id/domain', async (req, res) => {
             port: null
         });
 
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+apiRouter.get('/backups', async (_req, res) => {
+    try {
+        const jobs = await db('backup_jobs').select('*').orderBy('id', 'desc');
+        const enriched = await Promise.all(jobs.map(async (job) => {
+            let paths: string[] = [];
+            try {
+                const parsed = JSON.parse(job.paths);
+                if (Array.isArray(parsed)) paths = parsed;
+            } catch {}
+            const status = await getBackupTimerStatus(job.name);
+            return {
+                id: job.id,
+                name: job.name,
+                paths,
+                schedule: job.schedule,
+                enabled: Boolean(job.enabled),
+                status,
+                destination: BACKUP_DIR,
+                created_at: job.created_at
+            };
+        }));
+
+        res.json(enriched);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+apiRouter.post('/backups', async (req, res) => {
+    try {
+        const rawName = String(req.body?.name || '');
+        const rawSchedule = req.body?.schedule ? String(req.body.schedule) : 'daily';
+        const rawPaths = Array.isArray(req.body?.paths)
+            ? req.body.paths.map((p: unknown) => String(p))
+            : [];
+        const enableNow = Boolean(req.body?.enabled);
+
+        let name: string;
+        let schedule: string;
+        let paths: string[];
+        try {
+            name = validateBackupName(rawName);
+            schedule = validateBackupSchedule(rawSchedule);
+            paths = validateBackupPaths(rawPaths);
+        } catch (validationError: any) {
+            res.status(400).json({ error: validationError.message });
+            return;
+        }
+
+        const unitResult = await writeBackupUnits({ name, paths, schedule });
+        if (enableNow && unitResult.installed) {
+            await setBackupTimerEnabled(name, true);
+        }
+
+        const [id] = await db('backup_jobs').insert({
+            name,
+            paths: JSON.stringify(paths),
+            schedule,
+            enabled: enableNow && unitResult.installed ? 1 : 0,
+            created_at: Date.now()
+        });
+
+        res.status(201).json({
+            id,
+            name,
+            paths,
+            schedule,
+            enabled: enableNow && unitResult.installed,
+            unitName: unitResult.unitName,
+            installed: unitResult.installed,
+            warning: unitResult.warning
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+apiRouter.post('/backups/:id/toggle', async (req, res) => {
+    try {
+        const job = await db('backup_jobs').where('id', req.params.id).first();
+        if (!job) return res.status(404).json({ error: 'Not found' });
+
+        const enabled = Boolean(req.body?.enabled);
+        await setBackupTimerEnabled(job.name, enabled);
+        await db('backup_jobs').where('id', req.params.id).update({ enabled: enabled ? 1 : 0 });
+
+        res.json({ success: true, enabled });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+apiRouter.post('/backups/:id/run', async (req, res) => {
+    try {
+        const job = await db('backup_jobs').where('id', req.params.id).first();
+        if (!job) return res.status(404).json({ error: 'Not found' });
+
+        await runBackupNow(job.name);
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+apiRouter.delete('/backups/:id', async (req, res) => {
+    try {
+        const job = await db('backup_jobs').where('id', req.params.id).first();
+        if (!job) return res.status(404).json({ error: 'Not found' });
+
+        await removeBackupUnits(job.name);
+        await db('backup_jobs').where('id', req.params.id).del();
         res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ error: error.message });

@@ -104,6 +104,18 @@ export async function initializeDatabase() {
         await ensureProjectColumns();
     }
 
+    const hasBackupJobsTable = await db.schema.hasTable('backup_jobs');
+    if (!hasBackupJobsTable) {
+        await db.schema.createTable('backup_jobs', (table) => {
+            table.increments('id').primary();
+            table.string('name').notNullable().unique();
+            table.text('paths').notNullable();
+            table.string('schedule').notNullable().defaultTo('daily');
+            table.boolean('enabled').notNullable().defaultTo(false);
+            table.integer('created_at').notNullable();
+        });
+    }
+
     // Optional headless admin bootstrap via environment variable
     const initialPassword = process.env.AEROS_ADMIN_PASSWORD?.trim();
     if (initialPassword) {
