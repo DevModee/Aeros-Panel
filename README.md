@@ -1,5 +1,7 @@
 # AerosPanel
 
+[![CI](https://github.com/DevModee/Aeros-Panel/actions/workflows/ci.yml/badge.svg)](https://github.com/DevModee/Aeros-Panel/actions/workflows/ci.yml)
+
 A lightweight control panel to self-host apps on an old PC, without Docker.
 
 It runs as a single Node.js process on Debian/Ubuntu and talks directly to Linux `/sys/class/` sensors, `systemctl`, and `journalctl`, with no background polling overhead when idle.
@@ -51,11 +53,12 @@ What the installer does:
 2. Builds `frontend` into static files served directly by the Express backend (no Vite dev server in production).
 3. Generates a random initial admin password, hashes it with Node's native `scrypt` into SQLite (`aeros.db`), and prints it once at the end.
 4. Installs and enables `/etc/systemd/system/aeros-panel.service` with a `MemoryMax=256M` guardrail.
+5. Writes an optional `journald` drop-in (`/etc/systemd/journald.conf.d/aeros-limits.conf` with `SystemMaxUse=64M` and `RuntimeMaxUse=32M`) if no journald size cap is already configured (set `AEROS_JOURNALD_LIMITS=0` to skip).
 
 Optional environment overrides:
 
 ```bash
-AEROS_PORT=8080 AEROS_DIR=/opt/aeros-panel AEROS_MEMORY_MAX=256M sudo -E ./scripts/install.sh
+AEROS_PORT=8080 AEROS_DIR=/opt/aeros-panel AEROS_MEMORY_MAX=256M AEROS_JOURNALD_LIMITS=1 sudo -E ./scripts/install.sh
 ```
 
 Reset your admin password from SSH at any time:
@@ -71,9 +74,12 @@ node /opt/aeros-panel/backend/dist/seed.js admin your-new-password
 - **Single-Process Production Architecture**: Express serves both the API, authenticated WebSocket log stream, and prebuilt React static assets (`frontend/dist`) from one lightweight process.
 - **Lightweight Session Auth**: Built-in admin login using Node's native `crypto.scrypt` + `HttpOnly` `SameSite=Lax` session cookies stored in SQLite. Protects all REST endpoints and the WebSocket terminal with zero heavy auth frameworks.
 - **1-Click `systemd` Templates**: Create services from ready-made templates (`Node.js / TypeScript`, `Python (FastAPI / Bot)`, `Static / Vite`, `Java / Minecraft`, or `Custom Command`) with `Restart=always`, optional `MemoryMax=`, optional Linux `User=` isolation, and live `.service` preview.
-- **1-Click `Deploy / Update`**: Runs `git pull` (or initial `git clone`), installs dependencies only when lockfiles change, executes your build command if configured, and restarts the `systemd` unit — streaming every line live to the built-in WebSocket terminal.
+- **1-Click `Deploy / Update`**: Runs `git pull` (or initial `git clone`), installs dependencies only when lockfiles change, executes your build command if configured, and restarts the `systemd` unit, streaming every line live to the built-in WebSocket terminal.
+- **GitHub Webhook Auto-Deploy**: Per-project webhook endpoint (`POST /api/webhooks/github/:id`) verified with `X-Hub-Signature-256` (`crypto.timingSafeEqual`). Pushes to the configured branch trigger the deploy pipeline without any polling daemon.
+- **Optional Caddy Domain & HTTPS**: Passively detects whether `caddy` is active on the host. When active, lets you map a validated domain to a local port per project via isolated `/etc/caddy/conf.d/aeros-<service>.caddy` snippets and `systemctl reload caddy`.
+- **Native `systemd` Timer Backups**: Generates `Type=oneshot` `.service` and persistent `.timer` unit pairs from `Settings` to archive selected `.env` files and SQLite databases into `/var/backups/aeros-panel/` with `0600` permissions, toggled directly via `systemctl enable/disable --now`.
 - **Native Hardware Telemetry**: Reads CPU, RAM, storage, thermal zones, and laptop battery status directly from Linux `/sys/class/` and OS syscalls.
-- **Passive Remote Access Detection**: Checks on demand (zero background daemons) whether **Tailscale** or **Cloudflare Tunnel (`cloudflared`)** is active on the host and displays your remote panel URL in `Server Info`.
+- **Passive Remote Access Detection**: Checks on demand (zero background daemons) whether **Tailscale**, **Cloudflare Tunnel (`cloudflared`)**, or **Caddy** is active on the host and displays status in `Server Info`.
 - **`.env` File Editor**: Edit environment variables directly from the UI and persist them to `<work_dir>/.env`.
 - **Optional Aeros Ecosystem Status Feed (`/api/public/status`)**: Disabled by default. Toggle it on from `Settings` (with optional Bearer/`?token=` protection) to expose read-only host metrics and service `up/down` counts to **statuspulse**, **aerosdev.com**, or mobile alert clients.
 
