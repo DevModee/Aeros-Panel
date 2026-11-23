@@ -32,7 +32,12 @@ if (corsOrigin) {
     }));
 }
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({
+    limit: '1mb',
+    verify: (req, _res, buf) => {
+        (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+    }
+}));
 
 app.use('/api', apiRouter);
 

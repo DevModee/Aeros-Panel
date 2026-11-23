@@ -27,6 +27,8 @@ import { db } from '../database/db';
 import { getPublicStatusConfig, updatePublicStatusConfig } from '../database/settings';
 import { authRouter } from './auth';
 import { publicStatusRouter, invalidatePublicStatusCache } from './publicStatus';
+import { webhooksRouter } from './webhooks';
+import { generateWebhookSecret } from '../system/webhook';
 import { requireAuth } from '../auth/session';
 import { requireSameOriginForMutations } from '../auth/origin';
 
@@ -45,6 +47,7 @@ apiRouter.get('/health', (_req, res) => {
 
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/public', publicStatusRouter);
+apiRouter.use('/webhooks', webhooksRouter);
 
 // Everything below requires a valid session cookie
 apiRouter.use(requireAuth);
@@ -127,12 +130,19 @@ apiRouter.get('/projects', async (_req, res) => {
             'build_cmd',
             'run_user',
             'memory_max',
-            'last_deploy_at'
+            'last_deploy_at',
+            'webhook_secret'
         );
 
         const projectsWithStatus = await Promise.all(projects.map(async (p) => {
             const status = await getServiceStatus(p.service_name);
-            return { ...p, status, deploying: isDeployRunning(p.service_name) };
+            const { webhook_secret, ...safeProject } = p;
+            return {
+                ...safeProject,
+                has_webhook: Boolean(webhook_secret),
+                status,
+                deploying: isDeployRunning(p.service_name)
+            };
         }));
 
         res.json(projectsWithStatus);
@@ -284,6 +294,37 @@ apiRouter.post('/projects/:id/deploy', async (req, res) => {
 
         void deployProject(project);
         res.status(202).json({ started: true, service_name: project.service_name });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+apiRouter.post('/projects/:id/webhook', async (req, res) => {
+    try {
+        const project = await db('projects').where('id', req.params.id).first();
+        if (!project) return res.status(404).json({ error: 'Not found' });
+
+        const secret = generateWebhookSecret();
+        await db('projects').where('id', req.params.id).update({ webhook_secret: secret });
+
+        res.setHeader('Cache-Control', 'no-store');
+        res.json({
+            enabled: true,
+            secret,
+            path: `/api/webhooks/github/${project.id}`
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+apiRouter.delete('/projects/:id/webhook', async (req, res) => {
+    try {
+        const project = await db('projects').where('id', req.params.id).first();
+        if (!project) return res.status(404).json({ error: 'Not found' });
+
+        await db('projects').where('id', req.params.id).update({ webhook_secret: null });
+        res.json({ enabled: false });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
