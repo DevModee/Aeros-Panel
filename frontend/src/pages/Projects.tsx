@@ -10,7 +10,10 @@ import {
     Save,
     X,
     Trash2,
-    Rocket
+    Rocket,
+    Webhook,
+    Copy,
+    Check
 } from 'lucide-react';
 import { apiFetch, ApiError, buildWsUrl } from '../lib/api';
 import { NewProjectModal } from '../components/NewProjectModal';
@@ -28,6 +31,7 @@ interface Project {
     memory_max?: string | null;
     last_deploy_at?: string | null;
     deploying?: boolean;
+    has_webhook?: boolean;
 }
 
 export function Projects() {
@@ -38,6 +42,10 @@ export function Projects() {
     const [loadingEnv, setLoadingEnv] = useState(false);
     const [envContent, setEnvContent] = useState('');
     const [isNewModalOpen, setIsNewModalOpen] = useState(false);
+    const [isWebhookModalOpen, setIsWebhookModalOpen] = useState(false);
+    const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
+    const [webhookBusy, setWebhookBusy] = useState(false);
+    const [copiedField, setCopiedField] = useState<'url' | 'secret' | null>(null);
     const [deployingService, setDeployingService] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
@@ -104,7 +112,60 @@ export function Projects() {
         if (project.id !== selectedProjectId) {
             setLogs([]);
             setIsEditingEnv(false);
+            setIsWebhookModalOpen(false);
+            setWebhookSecret(null);
             setSelectedProjectId(project.id);
+        }
+    };
+
+    const openWebhookModal = () => {
+        setWebhookSecret(null);
+        setCopiedField(null);
+        setIsWebhookModalOpen(true);
+    };
+
+    const generateProjectWebhook = async () => {
+        if (!selectedProject || webhookBusy) return;
+        setWebhookBusy(true);
+        setNotice(null);
+        try {
+            const data = await apiFetch<{ enabled: boolean; secret: string; path: string }>(
+                `/api/projects/${selectedProject.id}/webhook`,
+                { method: 'POST' }
+            );
+            setWebhookSecret(data.secret);
+            await fetchProjects();
+        } catch (error) {
+            const message = error instanceof ApiError ? error.message : 'Failed to generate webhook secret.';
+            setNotice(message);
+        } finally {
+            setWebhookBusy(false);
+        }
+    };
+
+    const disableProjectWebhook = async () => {
+        if (!selectedProject || webhookBusy) return;
+        setWebhookBusy(true);
+        setNotice(null);
+        try {
+            await apiFetch(`/api/projects/${selectedProject.id}/webhook`, { method: 'DELETE' });
+            setWebhookSecret(null);
+            await fetchProjects();
+        } catch (error) {
+            const message = error instanceof ApiError ? error.message : 'Failed to disable webhook.';
+            setNotice(message);
+        } finally {
+            setWebhookBusy(false);
+        }
+    };
+
+    const copyText = async (value: string, field: 'url' | 'secret') => {
+        try {
+            await navigator.clipboard.writeText(value);
+            setCopiedField(field);
+            setTimeout(() => setCopiedField((curr) => (curr === field ? null : curr)), 1500);
+        } catch {
+            setNotice('Could not copy to clipboard.');
         }
     };
 
@@ -291,6 +352,14 @@ export function Projects() {
                                             CLEAR
                                         </button>
                                         <button
+                                            onClick={openWebhookModal}
+                                            className={`py-1.5 px-2.5 text-xs font-mono flex items-center bg-transparent border transition-colors cursor-pointer ${selectedProject.has_webhook ? 'border-aeros-blue text-aeros-blue hover:bg-aeros-blue hover:text-black' : 'border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue'}`}
+                                            title="Configure GitHub Push Webhook"
+                                        >
+                                            <Webhook size={13} className="mr-1.5" />
+                                            HOOK
+                                        </button>
+                                        <button
                                             onClick={openEnvEditor}
                                             className="py-1.5 px-2.5 text-xs font-mono flex items-center bg-transparent border border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer"
                                             title="Edit .env"
@@ -386,6 +455,107 @@ export function Projects() {
                 onClose={() => setIsNewModalOpen(false)}
                 onCreated={handleProjectCreated}
             />
+
+            {isWebhookModalOpen && selectedProject && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                    <div className="terminal-card border-aeros-gray bg-[#050505] w-full max-w-lg p-6 font-mono">
+                        <div className="flex justify-between items-center pb-3 mb-4 border-b border-aeros-gray">
+                            <span className="text-aeros-blue font-bold text-sm flex items-center">
+                                <Webhook size={15} className="mr-2" />
+                                GITHUB_WEBHOOK // {selectedProject.service_name}
+                            </span>
+                            <button
+                                onClick={() => {
+                                    setIsWebhookModalOpen(false);
+                                    setWebhookSecret(null);
+                                }}
+                                className="text-gray-400 hover:text-white bg-transparent border-0 cursor-pointer"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        <p className="text-xs text-gray-400 mb-4">
+                            Configure a GitHub repository webhook with content type{' '}
+                            <span className="text-gray-200">application/json</span> on{' '}
+                            <span className="text-aeros-blue">push</span> events targeting branch{' '}
+                            <span className="text-aeros-blue">{selectedProject.branch || 'main'}</span>.
+                        </p>
+
+                        <div className="mb-4">
+                            <label className="block text-[11px] text-gray-400 mb-1">PAYLOAD_URL</label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    readOnly
+                                    value={`${window.location.origin}/api/webhooks/github/${selectedProject.id}`}
+                                    className="flex-1 bg-black border border-aeros-gray px-3 py-2 text-xs text-gray-200 outline-none"
+                                />
+                                <button
+                                    onClick={() =>
+                                        copyText(
+                                            `${window.location.origin}/api/webhooks/github/${selectedProject.id}`,
+                                            'url'
+                                        )
+                                    }
+                                    className="px-3 py-2 text-xs border border-aeros-gray text-gray-200 hover:border-aeros-blue hover:text-aeros-blue bg-transparent cursor-pointer flex items-center"
+                                >
+                                    {copiedField === 'url' ? <Check size={14} /> : <Copy size={14} />}
+                                </button>
+                            </div>
+                        </div>
+
+                        {webhookSecret && (
+                            <div className="mb-4 p-3 border border-aeros-blue/60 bg-[#001422]">
+                                <label className="block text-[11px] text-aeros-blue mb-1">
+                                    WEBHOOK_SECRET (SHOWN ONCE)
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        readOnly
+                                        value={webhookSecret}
+                                        className="flex-1 bg-black border border-aeros-gray px-3 py-2 text-xs text-white outline-none"
+                                    />
+                                    <button
+                                        onClick={() => copyText(webhookSecret, 'secret')}
+                                        className="px-3 py-2 text-xs border border-aeros-blue text-aeros-blue hover:bg-aeros-blue hover:text-black bg-transparent cursor-pointer flex items-center"
+                                    >
+                                        {copiedField === 'secret' ? <Check size={14} /> : <Copy size={14} />}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex justify-between items-center pt-3 border-t border-aeros-gray">
+                            <span className="text-xs text-gray-400">
+                                STATUS:{' '}
+                                <span className={selectedProject.has_webhook ? 'text-green-400' : 'text-gray-500'}>
+                                    {selectedProject.has_webhook ? 'ENABLED' : 'DISABLED'}
+                                </span>
+                            </span>
+                            <div className="flex gap-2">
+                                {selectedProject.has_webhook && (
+                                    <button
+                                        onClick={disableProjectWebhook}
+                                        disabled={webhookBusy}
+                                        className="px-3 py-1.5 text-xs border border-red-500 text-red-400 hover:bg-red-500 hover:text-white bg-transparent cursor-pointer disabled:opacity-50"
+                                    >
+                                        DISABLE
+                                    </button>
+                                )}
+                                <button
+                                    onClick={generateProjectWebhook}
+                                    disabled={webhookBusy}
+                                    className="px-3 py-1.5 text-xs border border-aeros-blue text-aeros-blue hover:bg-aeros-blue hover:text-black bg-transparent cursor-pointer disabled:opacity-50"
+                                >
+                                    {selectedProject.has_webhook ? 'ROTATE_SECRET' : 'GENERATE_SECRET'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
