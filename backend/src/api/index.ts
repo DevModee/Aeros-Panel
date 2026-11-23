@@ -23,6 +23,7 @@ import {
 import { validateGitBranch, validateRepositoryUrl } from '../system/git';
 import { deployProject, isDeployRunning } from '../system/deploy';
 import { getRemoteAccessInfo } from '../system/remote';
+import { applyCaddyRoute, detectCaddy, removeCaddyRoute } from '../system/caddy';
 import { db } from '../database/db';
 import { getPublicStatusConfig, updatePublicStatusConfig } from '../database/settings';
 import { authRouter } from './auth';
@@ -131,7 +132,9 @@ apiRouter.get('/projects', async (_req, res) => {
             'run_user',
             'memory_max',
             'last_deploy_at',
-            'webhook_secret'
+            'webhook_secret',
+            'domain',
+            'port'
         );
 
         const projectsWithStatus = await Promise.all(projects.map(async (p) => {
@@ -240,6 +243,10 @@ apiRouter.delete('/projects/:id', async (req, res) => {
             await removeSystemdUnit(project.service_name);
         }
 
+        if (project.domain) {
+            await removeCaddyRoute(project.service_name).catch(() => {});
+        }
+
         await db('projects').where('id', req.params.id).del();
         res.json({ success: true });
     } catch (error: any) {
@@ -325,6 +332,59 @@ apiRouter.delete('/projects/:id/webhook', async (req, res) => {
 
         await db('projects').where('id', req.params.id).update({ webhook_secret: null });
         res.json({ enabled: false });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+apiRouter.get('/caddy/status', async (_req, res) => {
+    try {
+        const info = await detectCaddy();
+        res.json(info);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+apiRouter.put('/projects/:id/domain', async (req, res) => {
+    try {
+        const project = await db('projects').where('id', req.params.id).first();
+        if (!project) return res.status(404).json({ error: 'Not found' });
+
+        const rawDomain = typeof req.body?.domain === 'string' ? req.body.domain : '';
+        const rawPort = req.body?.port;
+
+        let applied: { domain: string; port: number; snippetPath: string };
+        try {
+            applied = await applyCaddyRoute(project.service_name, rawDomain, rawPort);
+        } catch (error: any) {
+            res.status(400).json({ error: error.message });
+            return;
+        }
+
+        await db('projects').where('id', req.params.id).update({
+            domain: applied.domain,
+            port: applied.port
+        });
+
+        res.json({ success: true, domain: applied.domain, port: applied.port });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+apiRouter.delete('/projects/:id/domain', async (req, res) => {
+    try {
+        const project = await db('projects').where('id', req.params.id).first();
+        if (!project) return res.status(404).json({ error: 'Not found' });
+
+        await removeCaddyRoute(project.service_name);
+        await db('projects').where('id', req.params.id).update({
+            domain: null,
+            port: null
+        });
+
+        res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
