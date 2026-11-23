@@ -11,6 +11,7 @@ AEROS_BRANCH="${AEROS_BRANCH:-main}"
 AEROS_ADMIN_USER="${AEROS_ADMIN_USER:-admin}"
 AEROS_MEMORY_MAX="${AEROS_MEMORY_MAX:-256M}"
 AEROS_CLEAN_FRONTEND_MODULES="${AEROS_CLEAN_FRONTEND_MODULES:-1}"
+AEROS_JOURNALD_LIMITS="${AEROS_JOURNALD_LIMITS:-1}"
 
 BLUE='\033[0;36m'
 PURPLE='\033[0;35m'
@@ -145,6 +146,28 @@ EOF
 systemctl daemon-reload
 systemctl enable aeros-panel >/dev/null
 systemctl restart aeros-panel
+
+if [[ "${AEROS_JOURNALD_LIMITS}" -eq 1 ]]; then
+    JOURNALD_DROPIN="/etc/systemd/journald.conf.d/aeros-limits.conf"
+    HAS_JOURNALD_CAP=0
+    if [[ -f "${JOURNALD_DROPIN}" ]] || grep -Eq '^[[:space:]]*(SystemMaxUse|RuntimeMaxUse)=' /etc/systemd/journald.conf /etc/systemd/journald.conf.d/*.conf 2>/dev/null; then
+        HAS_JOURNALD_CAP=1
+    fi
+
+    if [[ "${HAS_JOURNALD_CAP}" -eq 0 ]]; then
+        log "Applying journald size caps (${JOURNALD_DROPIN})..."
+        mkdir -p /etc/systemd/journald.conf.d
+        cat > "${JOURNALD_DROPIN}" <<EOF
+[Journal]
+SystemMaxUse=64M
+RuntimeMaxUse=32M
+EOF
+        systemctl restart systemd-journald || warn "Could not restart systemd-journald; caps will apply on next reboot."
+        ok "Configured journald limits (SystemMaxUse=64M, RuntimeMaxUse=32M)."
+    else
+        ok "Existing journald size configuration detected; leaving untouched."
+    fi
+fi
 
 LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 LAN_IP="${LAN_IP:-127.0.0.1}"
