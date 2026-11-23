@@ -17,6 +17,12 @@ interface CloudflareTunnelInfo {
     panelUrl: string | null;
 }
 
+interface CaddyInfo {
+    installed: boolean;
+    active: boolean;
+    routes: Array<{ serviceName: string; domain: string; port: number }>;
+}
+
 interface SystemInfoData {
     hostname: string;
     os: string;
@@ -32,6 +38,7 @@ interface SystemInfoData {
     remoteAccess?: {
         tailscale: TailscaleInfo;
         cloudflare: CloudflareTunnelInfo;
+        caddy?: CaddyInfo;
     };
 }
 
@@ -64,7 +71,8 @@ export function ServerInfo() {
 
     const ts = info?.remoteAccess?.tailscale;
     const cf = info?.remoteAccess?.cloudflare;
-    const hasAnyRemote = Boolean(ts?.connected || cf?.active);
+    const caddy = info?.remoteAccess?.caddy;
+    const hasAnyRemote = Boolean(ts?.connected || cf?.active || caddy?.active);
 
     return (
         <div className="max-w-4xl mx-auto flex flex-col h-full font-mono">
@@ -145,7 +153,7 @@ export function ServerInfo() {
                         <span className="text-[11px] text-gray-500">ZERO BACKGROUND DAEMONS</span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-gray-300">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-gray-300">
                         <div className="border border-aeros-gray p-4 bg-black space-y-3">
                             <div className="flex justify-between items-center border-b border-aeros-gray pb-2">
                                 <span className="font-bold text-white">TAILSCALE</span>
@@ -217,6 +225,33 @@ export function ServerInfo() {
                                 ) : (
                                     <span className="text-gray-500">UNAVAILABLE</span>
                                 )}
+                            </div>
+                        </div>
+
+                        <div className="border border-aeros-gray p-4 bg-black space-y-3">
+                            <div className="flex justify-between items-center border-b border-aeros-gray pb-2">
+                                <span className="font-bold text-white">CADDY_HTTPS</span>
+                                <span className={`text-xs px-2 py-0.5 ${
+                                    caddy?.active
+                                        ? 'bg-green-900 text-green-400'
+                                        : caddy?.installed
+                                            ? 'bg-yellow-900/60 text-yellow-400'
+                                            : 'bg-aeros-gray text-gray-400'
+                                }`}>
+                                    {caddy?.active ? 'ACTIVE' : caddy?.installed ? 'STOPPED' : 'NOT_INSTALLED'}
+                                </span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                                <span className="text-gray-500">MANAGED_ROUTES</span>
+                                <span>{caddy?.routes ? caddy.routes.length : 0}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs gap-2">
+                                <span className="text-gray-500 shrink-0">DOMAINS</span>
+                                <span className="truncate ml-2 text-aeros-blue">
+                                    {caddy?.routes && caddy.routes.length > 0
+                                        ? caddy.routes.map((r) => r.domain).join(', ')
+                                        : 'NONE_CONFIGURED'}
+                                </span>
                             </div>
                         </div>
                     </div>

@@ -12,6 +12,7 @@ import {
     Trash2,
     Rocket,
     Webhook,
+    Globe,
     Copy,
     Check
 } from 'lucide-react';
@@ -32,6 +33,8 @@ interface Project {
     last_deploy_at?: string | null;
     deploying?: boolean;
     has_webhook?: boolean;
+    domain?: string | null;
+    port?: number | null;
 }
 
 export function Projects() {
@@ -46,6 +49,11 @@ export function Projects() {
     const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
     const [webhookBusy, setWebhookBusy] = useState(false);
     const [copiedField, setCopiedField] = useState<'url' | 'secret' | null>(null);
+    const [caddyActive, setCaddyActive] = useState(false);
+    const [isDomainModalOpen, setIsDomainModalOpen] = useState(false);
+    const [domainInput, setDomainInput] = useState('');
+    const [portInput, setPortInput] = useState('3000');
+    const [domainBusy, setDomainBusy] = useState(false);
     const [deployingService, setDeployingService] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
@@ -75,6 +83,11 @@ export function Projects() {
             .catch((error) => {
                 console.error(error);
             });
+        apiFetch<{ installed: boolean; active: boolean }>('/api/caddy/status')
+            .then((data) => {
+                if (active) setCaddyActive(Boolean(data.active));
+            })
+            .catch(() => {});
         return () => {
             active = false;
         };
@@ -113,8 +126,53 @@ export function Projects() {
             setLogs([]);
             setIsEditingEnv(false);
             setIsWebhookModalOpen(false);
+            setIsDomainModalOpen(false);
             setWebhookSecret(null);
             setSelectedProjectId(project.id);
+        }
+    };
+
+    const openDomainModal = () => {
+        if (!selectedProject) return;
+        setDomainInput(selectedProject.domain || '');
+        setPortInput(selectedProject.port ? String(selectedProject.port) : '3000');
+        setIsDomainModalOpen(true);
+    };
+
+    const saveProjectDomain = async () => {
+        if (!selectedProject || domainBusy) return;
+        setDomainBusy(true);
+        setNotice(null);
+        try {
+            await apiFetch(`/api/projects/${selectedProject.id}/domain`, {
+                method: 'PUT',
+                body: JSON.stringify({ domain: domainInput.trim(), port: Number(portInput) })
+            });
+            setIsDomainModalOpen(false);
+            await fetchProjects();
+            setNotice(`Configured Caddy HTTPS route for ${domainInput.trim()}.`);
+        } catch (error) {
+            const message = error instanceof ApiError ? error.message : 'Failed to configure domain.';
+            setNotice(message);
+        } finally {
+            setDomainBusy(false);
+        }
+    };
+
+    const removeProjectDomain = async () => {
+        if (!selectedProject || domainBusy) return;
+        setDomainBusy(true);
+        setNotice(null);
+        try {
+            await apiFetch(`/api/projects/${selectedProject.id}/domain`, { method: 'DELETE' });
+            setIsDomainModalOpen(false);
+            await fetchProjects();
+            setNotice('Removed Caddy route for project.');
+        } catch (error) {
+            const message = error instanceof ApiError ? error.message : 'Failed to remove domain.';
+            setNotice(message);
+        } finally {
+            setDomainBusy(false);
         }
     };
 
@@ -351,6 +409,16 @@ export function Projects() {
                                             <Trash2 size={13} className="mr-1.5" />
                                             CLEAR
                                         </button>
+                                        {caddyActive && (
+                                            <button
+                                                onClick={openDomainModal}
+                                                className={`py-1.5 px-2.5 text-xs font-mono flex items-center bg-transparent border transition-colors cursor-pointer ${selectedProject.domain ? 'border-green-500 text-green-400 hover:bg-green-500 hover:text-black' : 'border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue'}`}
+                                                title="Configure Caddy Domain + HTTPS"
+                                            >
+                                                <Globe size={13} className="mr-1.5" />
+                                                DOMAIN
+                                            </button>
+                                        )}
                                         <button
                                             onClick={openWebhookModal}
                                             className={`py-1.5 px-2.5 text-xs font-mono flex items-center bg-transparent border transition-colors cursor-pointer ${selectedProject.has_webhook ? 'border-aeros-blue text-aeros-blue hover:bg-aeros-blue hover:text-black' : 'border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue'}`}
@@ -404,6 +472,14 @@ export function Projects() {
                                 {selectedProject.work_dir && <span>DIR: <span className="text-gray-200">{selectedProject.work_dir}</span></span>}
                                 {selectedProject.branch && <span>BRANCH: <span className="text-aeros-blue">{selectedProject.branch}</span></span>}
                                 {selectedProject.memory_max && <span>RAM_CAP: <span className="text-aeros-purple">{selectedProject.memory_max}</span></span>}
+                                {selectedProject.domain && (
+                                    <span>
+                                        HTTPS:{' '}
+                                        <span className="text-green-400">
+                                            {selectedProject.domain} → :{selectedProject.port}
+                                        </span>
+                                    </span>
+                                )}
                                 {selectedProject.last_deploy_at && (
                                     <span>LAST_DEPLOY: <span className="text-gray-300">{formatDeployTime(selectedProject.last_deploy_at)}</span></span>
                                 )}
@@ -552,6 +628,75 @@ export function Projects() {
                                     {selectedProject.has_webhook ? 'ROTATE_SECRET' : 'GENERATE_SECRET'}
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isDomainModalOpen && selectedProject && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                    <div className="terminal-card border-aeros-gray bg-[#050505] w-full max-w-md p-6 font-mono">
+                        <div className="flex justify-between items-center pb-3 mb-4 border-b border-aeros-gray">
+                            <span className="text-aeros-blue font-bold text-sm flex items-center">
+                                <Globe size={15} className="mr-2" />
+                                CADDY_DOMAIN // {selectedProject.service_name}
+                            </span>
+                            <button
+                                onClick={() => setIsDomainModalOpen(false)}
+                                className="text-gray-400 hover:text-white bg-transparent border-0 cursor-pointer"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        <p className="text-xs text-gray-400 mb-4">
+                            Writes an isolated snippet under <span className="text-gray-200">/etc/caddy/conf.d/</span> and reloads Caddy for automatic HTTPS.
+                        </p>
+
+                        <div className="space-y-3 mb-5">
+                            <div>
+                                <label className="block text-[11px] text-gray-400 mb-1">DOMAIN (FQDN)</label>
+                                <input
+                                    type="text"
+                                    value={domainInput}
+                                    onChange={(e) => setDomainInput(e.target.value)}
+                                    placeholder="app.example.com"
+                                    className="w-full bg-black border border-aeros-gray px-3 py-2 text-xs text-white focus:border-aeros-blue outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] text-gray-400 mb-1">LOCAL_PORT</label>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={65535}
+                                    value={portInput}
+                                    onChange={(e) => setPortInput(e.target.value)}
+                                    placeholder="3000"
+                                    className="w-full bg-black border border-aeros-gray px-3 py-2 text-xs text-white focus:border-aeros-blue outline-none"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-3 border-t border-aeros-gray">
+                            {selectedProject.domain ? (
+                                <button
+                                    onClick={removeProjectDomain}
+                                    disabled={domainBusy}
+                                    className="px-3 py-1.5 text-xs border border-red-500 text-red-400 hover:bg-red-500 hover:text-white bg-transparent cursor-pointer disabled:opacity-50"
+                                >
+                                    REMOVE
+                                </button>
+                            ) : (
+                                <span />
+                            )}
+                            <button
+                                onClick={saveProjectDomain}
+                                disabled={domainBusy || !domainInput.trim()}
+                                className="px-3 py-1.5 text-xs border border-aeros-blue text-aeros-blue hover:bg-aeros-blue hover:text-black bg-transparent cursor-pointer disabled:opacity-50"
+                            >
+                                {domainBusy ? 'APPLYING...' : 'APPLY_ROUTE'}
+                            </button>
                         </div>
                     </div>
                 </div>
