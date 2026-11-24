@@ -43,7 +43,8 @@ describe('validateUnitConfig', () => {
             template: 'python',
             workDir: '/opt/tg-bot',
             runUser: 'deploy',
-            memoryMax: '256m'
+            memoryMax: '256m',
+            cpuQuota: '150%'
         });
 
         assert.equal(config.serviceName, 'tg-bot');
@@ -51,6 +52,7 @@ describe('validateUnitConfig', () => {
         assert.equal(config.execStart, '/opt/tg-bot/.venv/bin/python main.py');
         assert.equal(config.runUser, 'deploy');
         assert.equal(config.memoryMax, '256M');
+        assert.equal(config.cpuQuota, '150%');
     });
 
     it('resolves relative ./ and .venv/ execStart against workDir', () => {
@@ -98,11 +100,31 @@ describe('validateUnitConfig', () => {
                 }),
             /Invalid MemoryMax/
         );
+        assert.throws(
+            () =>
+                validateUnitConfig({
+                    name: 'App',
+                    serviceName: 'valid-app',
+                    template: 'node',
+                    cpuQuota: '50'
+                }),
+            /Invalid CPUQuota/
+        );
+        assert.throws(
+            () =>
+                validateUnitConfig({
+                    name: 'App',
+                    serviceName: 'valid-app',
+                    template: 'node',
+                    cpuQuota: '0%'
+                }),
+            /Invalid CPUQuota/
+        );
     });
 });
 
 describe('generateSystemdUnit', () => {
-    it('generates a complete systemd unit with optional User and MemoryMax', () => {
+    it('generates a complete systemd unit with optional User, MemoryMax, and CPUQuota', () => {
         const { unitContent } = generateSystemdUnit({
             name: 'API Service',
             serviceName: 'api-svc',
@@ -110,7 +132,8 @@ describe('generateSystemdUnit', () => {
             workDir: '/opt/api-svc',
             execStart: '/usr/bin/node dist/index.js',
             runUser: 'www-data',
-            memoryMax: '512M'
+            memoryMax: '512M',
+            cpuQuota: '200%'
         });
 
         assert.match(unitContent, /Description=AerosPanel Service: API Service/);
@@ -119,11 +142,12 @@ describe('generateSystemdUnit', () => {
         assert.match(unitContent, /ExecStart=\/usr\/bin\/node dist\/index\.js/);
         assert.match(unitContent, /User=www-data/);
         assert.match(unitContent, /MemoryMax=512M/);
+        assert.match(unitContent, /CPUQuota=200%/);
         assert.match(unitContent, /SyslogIdentifier=api-svc/);
         assert.match(unitContent, /WantedBy=multi-user\.target/);
     });
 
-    it('omits User and MemoryMax lines when not provided', () => {
+    it('omits User, MemoryMax, and CPUQuota lines when not provided', () => {
         const { unitContent } = generateSystemdUnit({
             name: 'Minimal Service',
             serviceName: 'minimal-svc',
@@ -132,5 +156,6 @@ describe('generateSystemdUnit', () => {
 
         assert.doesNotMatch(unitContent, /^User=/m);
         assert.doesNotMatch(unitContent, /^MemoryMax=/m);
+        assert.doesNotMatch(unitContent, /^CPUQuota=/m);
     });
 });

@@ -107,7 +107,8 @@ apiRouter.post('/templates/preview', (req, res) => {
             work_dir,
             exec_start,
             run_user,
-            memory_max
+            memory_max,
+            cpu_quota
         } = req.body || {};
 
         const result = generateSystemdUnit({
@@ -117,7 +118,8 @@ apiRouter.post('/templates/preview', (req, res) => {
             workDir: work_dir ? String(work_dir) : undefined,
             execStart: exec_start ? String(exec_start) : undefined,
             runUser: run_user ? String(run_user) : undefined,
-            memoryMax: memory_max ? String(memory_max) : undefined
+            memoryMax: memory_max ? String(memory_max) : undefined,
+            cpuQuota: cpu_quota ? String(cpu_quota) : undefined
         });
 
         res.json(result);
@@ -142,6 +144,7 @@ apiRouter.get('/projects', async (_req, res) => {
             'build_cmd',
             'run_user',
             'memory_max',
+            'cpu_quota',
             'last_deploy_at',
             'webhook_secret',
             'domain',
@@ -195,7 +198,8 @@ apiRouter.post('/projects', async (req, res) => {
                 workDir: req.body?.work_dir ? String(req.body.work_dir) : undefined,
                 execStart: req.body?.exec_start ? String(req.body.exec_start) : undefined,
                 runUser: req.body?.run_user ? String(req.body.run_user) : undefined,
-                memoryMax: req.body?.memory_max ? String(req.body.memory_max) : undefined
+                memoryMax: req.body?.memory_max ? String(req.body.memory_max) : undefined,
+                cpuQuota: req.body?.cpu_quota ? String(req.body.cpu_quota) : undefined
             });
             config = generated.config;
             unitContent = generated.unitContent;
@@ -215,7 +219,8 @@ apiRouter.post('/projects', async (req, res) => {
             exec_start: config.execStart,
             build_cmd: buildCmd || null,
             run_user: config.runUser || null,
-            memory_max: config.memoryMax || null
+            memory_max: config.memoryMax || null,
+            cpu_quota: config.cpuQuota || null
         });
 
         let unitResult: { installed: boolean; unitPath: string; warning?: string } = {

@@ -11,6 +11,7 @@ export interface ProjectTemplate {
     defaultExecStart: string;
     defaultBuildCmd: string;
     defaultMemoryMax: string;
+    defaultCpuQuota: string;
     defaultUser: string;
     hint: string;
 }
@@ -24,6 +25,7 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
         defaultExecStart: '/usr/bin/node dist/index.js',
         defaultBuildCmd: 'npm run build',
         defaultMemoryMax: '256M',
+        defaultCpuQuota: '',
         defaultUser: '',
         hint: 'Use /usr/bin/node index.js for plain JS projects without a build step.'
     },
@@ -35,6 +37,7 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
         defaultExecStart: '{{WORK_DIR}}/.venv/bin/python main.py',
         defaultBuildCmd: '',
         defaultMemoryMax: '256M',
+        defaultCpuQuota: '',
         defaultUser: '',
         hint: 'For FastAPI: {{WORK_DIR}}/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000'
     },
@@ -46,6 +49,7 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
         defaultExecStart: '/usr/bin/python3 -m http.server 8080 --directory dist',
         defaultBuildCmd: 'npm run build',
         defaultMemoryMax: '128M',
+        defaultCpuQuota: '',
         defaultUser: '',
         hint: 'Zero-config static file server; swap ExecStart for Caddy or serve if preferred.'
     },
@@ -57,6 +61,7 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
         defaultExecStart: '/usr/bin/java -Xms512M -Xmx1G -jar server.jar nogui',
         defaultBuildCmd: '',
         defaultMemoryMax: '1536M',
+        defaultCpuQuota: '',
         defaultUser: '',
         hint: 'Keep MemoryMax slightly above -Xmx so JVM overhead does not trigger OOM kills.'
     },
@@ -68,6 +73,7 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
         defaultExecStart: '/usr/bin/env bash start.sh',
         defaultBuildCmd: '',
         defaultMemoryMax: '512M',
+        defaultCpuQuota: '',
         defaultUser: '',
         hint: 'Provide any absolute executable path and arguments for systemd ExecStart.'
     }
@@ -76,6 +82,7 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
 export const SERVICE_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
 const USER_PATTERN = /^[a-z_][a-z0-9_-]{0,31}$/;
 const MEMORY_MAX_PATTERN = /^\d+[KMG]?$/i;
+const CPU_QUOTA_PATTERN = /^([1-9]\d{0,3})%$/;
 
 const BLOCKED_WORK_DIR_PREFIXES = [
     '/etc',
@@ -100,6 +107,7 @@ export interface SystemdUnitConfig {
     execStart?: string;
     runUser?: string;
     memoryMax?: string;
+    cpuQuota?: string;
 }
 
 export function getTemplateById(id: string): ProjectTemplate {
@@ -142,6 +150,7 @@ export function validateUnitConfig(input: SystemdUnitConfig): {
     execStart: string;
     runUser: string;
     memoryMax: string;
+    cpuQuota: string;
 } {
     const name = sanitizeSingleLine(input.name);
     const serviceName = input.serviceName.trim();
@@ -183,6 +192,17 @@ export function validateUnitConfig(input: SystemdUnitConfig): {
     }
     const memoryMax = memoryMaxRaw.toUpperCase();
 
+    const cpuQuotaRaw = sanitizeSingleLine(input.cpuQuota || '');
+    let cpuQuota = '';
+    if (cpuQuotaRaw) {
+        const match = CPU_QUOTA_PATTERN.exec(cpuQuotaRaw);
+        const quotaValue = match ? Number(match[1]) : 0;
+        if (!match || quotaValue < 1 || quotaValue > 6400) {
+            throw new Error('Invalid CPUQuota value. Use a percentage between 1% and 6400% (e.g. 50%, 100%, 200%).');
+        }
+        cpuQuota = `${quotaValue}%`;
+    }
+
     return {
         name,
         serviceName,
@@ -190,7 +210,8 @@ export function validateUnitConfig(input: SystemdUnitConfig): {
         workDir,
         execStart,
         runUser,
-        memoryMax
+        memoryMax,
+        cpuQuota
     };
 }
 
@@ -220,6 +241,10 @@ export function generateSystemdUnit(input: SystemdUnitConfig): {
 
     if (config.memoryMax) {
         lines.push(`MemoryMax=${config.memoryMax}`);
+    }
+
+    if (config.cpuQuota) {
+        lines.push(`CPUQuota=${config.cpuQuota}`);
     }
 
     lines.push(
