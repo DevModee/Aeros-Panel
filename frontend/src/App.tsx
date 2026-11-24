@@ -82,7 +82,7 @@ function App() {
   const renderContent = () => {
     switch (currentPath) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onNavigate={setCurrentPath} />;
       case 'projects':
         return <Projects />;
       case 'server':
