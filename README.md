@@ -145,6 +145,16 @@ On first visit to `http://localhost:3000`, if no admin user exists yet, AerosPan
 
 ---
 
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, verification commands, and architecture rules (zero Docker, ~20-30 MB idle RAM, and security guards).
+
+<a href="https://github.com/DevModee/Aeros-Panel/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=DevModee/Aeros-Panel" alt="Contributors" />
+</a>
+
+---
+
 ## License
 
 Released under the [MIT License](LICENSE).
