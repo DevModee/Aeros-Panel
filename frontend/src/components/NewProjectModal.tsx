@@ -12,9 +12,69 @@ export interface ProjectTemplate {
     defaultExecStart: string;
     defaultBuildCmd: string;
     defaultMemoryMax: string;
+    defaultCpuQuota: string;
     defaultUser: string;
     hint: string;
 }
+
+interface StarterPreset {
+    id: string;
+    label: string;
+    name: string;
+    serviceName: string;
+    workDir: string;
+    execStart: string;
+    memoryMax: string;
+    cpuQuota: string;
+    description: string;
+}
+
+const STARTER_PACK_PRESETS: StarterPreset[] = [
+    {
+        id: 'n8n',
+        label: 'n8n',
+        name: 'n8n',
+        serviceName: 'n8n',
+        workDir: '/opt/n8n',
+        execStart: '/usr/bin/env n8n start',
+        memoryMax: '512M',
+        cpuQuota: '150%',
+        description: 'Workflow automation (requires global n8n installed via npm)'
+    },
+    {
+        id: 'qbittorrent',
+        label: 'qBittorrent-nox',
+        serviceName: 'qbittorrent-nox',
+        name: 'qBittorrent',
+        workDir: '/opt/qbittorrent',
+        execStart: '/usr/bin/qbittorrent-nox --webui-port=8080',
+        memoryMax: '256M',
+        cpuQuota: '100%',
+        description: 'Headless torrent client (apt install qbittorrent-nox)'
+    },
+    {
+        id: 'filebrowser',
+        label: 'Filebrowser',
+        name: 'Filebrowser',
+        serviceName: 'filebrowser',
+        workDir: '/opt/filebrowser',
+        execStart: '/usr/local/bin/filebrowser -a 0.0.0.0 -p 8085 -r /srv',
+        memoryMax: '128M',
+        cpuQuota: '100%',
+        description: 'Lightweight single-binary web file manager'
+    },
+    {
+        id: 'syncthing',
+        label: 'Syncthing',
+        name: 'Syncthing',
+        serviceName: 'syncthing',
+        workDir: '/opt/syncthing',
+        execStart: '/usr/bin/syncthing serve --no-browser --gui-address=0.0.0.0:8384',
+        memoryMax: '256M',
+        cpuQuota: '100%',
+        description: 'Continuous peer-to-peer file synchronization (apt install syncthing)'
+    }
+];
 
 interface NewProjectModalProps {
     isOpen: boolean;
@@ -44,7 +104,9 @@ export function NewProjectModal({ isOpen, onClose, onCreated }: NewProjectModalP
     const [execStart, setExecStart] = useState('/usr/bin/node dist/index.js');
     const [buildCmd, setBuildCmd] = useState('npm run build');
     const [memoryMax, setMemoryMax] = useState('256M');
+    const [cpuQuota, setCpuQuota] = useState('');
     const [runUser, setRunUser] = useState('');
+    const [activePreset, setActivePreset] = useState<string | null>(null);
     const [createUnit, setCreateUnit] = useState(true);
 
     const [previewOpen, setPreviewOpen] = useState(false);
@@ -65,6 +127,7 @@ export function NewProjectModal({ isOpen, onClose, onCreated }: NewProjectModalP
                     setExecStart(first.defaultExecStart);
                     setBuildCmd(first.defaultBuildCmd);
                     setMemoryMax(first.defaultMemoryMax);
+                    setCpuQuota(first.defaultCpuQuota || '');
                     setRunUser(first.defaultUser);
                 }
             })
@@ -80,12 +143,32 @@ export function NewProjectModal({ isOpen, onClose, onCreated }: NewProjectModalP
     const currentTemplate = templates.find((t) => t.id === selectedTemplate);
 
     const applyTemplate = (tpl: ProjectTemplate) => {
+        setActivePreset(null);
         setSelectedTemplate(tpl.id);
         setExecStart(tpl.defaultExecStart);
         setBuildCmd(tpl.defaultBuildCmd);
         setMemoryMax(tpl.defaultMemoryMax);
+        setCpuQuota(tpl.defaultCpuQuota || '');
         setRunUser(tpl.defaultUser);
         setPreviewOpen(false);
+    };
+
+    const applyStarterPreset = (preset: StarterPreset) => {
+        setActivePreset(preset.id);
+        setSelectedTemplate('custom');
+        setName(preset.name);
+        setServiceName(preset.serviceName);
+        setServiceTouched(true);
+        setWorkDir(preset.workDir);
+        setWorkDirTouched(true);
+        setRepository('');
+        setExecStart(preset.execStart);
+        setBuildCmd('');
+        setMemoryMax(preset.memoryMax);
+        setCpuQuota(preset.cpuQuota);
+        setRunUser('');
+        setPreviewOpen(false);
+        setError(null);
     };
 
     const syncDerivedFields = (nextName: string, nextRepo: string) => {
@@ -135,7 +218,8 @@ export function NewProjectModal({ isOpen, onClose, onCreated }: NewProjectModalP
                     work_dir: workDir,
                     exec_start: execStart,
                     run_user: runUser,
-                    memory_max: memoryMax
+                    memory_max: memoryMax,
+                    cpu_quota: cpuQuota
                 })
             });
             setPreviewContent(data.unitContent);
@@ -167,6 +251,7 @@ export function NewProjectModal({ isOpen, onClose, onCreated }: NewProjectModalP
                     build_cmd: buildCmd.trim(),
                     run_user: runUser.trim(),
                     memory_max: memoryMax.trim(),
+                    cpu_quota: cpuQuota.trim(),
                     create_unit: createUnit
                 })
             });
@@ -220,6 +305,35 @@ export function NewProjectModal({ isOpen, onClose, onCreated }: NewProjectModalP
                         <div className="mt-2 text-xs text-gray-400">
                             <span>{currentTemplate.description}</span>
                             <span className="block text-[11px] text-gray-500 mt-1">TIP: {currentTemplate.hint}</span>
+                        </div>
+                    )}
+                </div>
+
+                <div className="mb-5">
+                    <div className="text-xs text-aeros-purple mb-2 tracking-wider">STARTER_PACK (OPTIONAL_PRESETS)</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {STARTER_PACK_PRESETS.map((preset) => (
+                            <button
+                                key={preset.id}
+                                type="button"
+                                onClick={() => applyStarterPreset(preset)}
+                                title={preset.description}
+                                className={`px-3 py-2 text-xs font-mono border transition-colors cursor-pointer text-left ${
+                                    activePreset === preset.id
+                                        ? 'border-aeros-blue bg-[#001829] text-aeros-blue font-bold'
+                                        : 'border-aeros-gray bg-[#0a0a0a] text-gray-300 hover:border-aeros-purple'
+                                }`}
+                            >
+                                <div>{preset.label}</div>
+                                <div className="text-[10px] text-gray-500 mt-0.5">
+                                    {preset.memoryMax} / {preset.cpuQuota}
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                    {activePreset && (
+                        <div className="mt-1.5 text-[11px] text-gray-400">
+                            {STARTER_PACK_PRESETS.find((p) => p.id === activePreset)?.description}
                         </div>
                     )}
                 </div>
@@ -319,9 +433,9 @@ export function NewProjectModal({ isOpen, onClose, onCreated }: NewProjectModalP
                         />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="flex flex-col">
-                            <label className="text-gray-400 mb-1.5">MEMORY_MAX (optional, e.g. 256M, 1G)</label>
+                            <label className="text-gray-400 mb-1.5">MEMORY_MAX (e.g. 256M, 1G)</label>
                             <input
                                 type="text"
                                 value={memoryMax}
@@ -331,12 +445,22 @@ export function NewProjectModal({ isOpen, onClose, onCreated }: NewProjectModalP
                             />
                         </div>
                         <div className="flex flex-col">
-                            <label className="text-gray-400 mb-1.5">LINUX_USER (optional isolation)</label>
+                            <label className="text-gray-400 mb-1.5">CPU_QUOTA (e.g. 100%, 200%)</label>
+                            <input
+                                type="text"
+                                value={cpuQuota}
+                                onChange={(e) => setCpuQuota(e.target.value)}
+                                placeholder="Optional (e.g. 100%)"
+                                className="bg-[#0a0a0a] border border-aeros-gray px-3 py-2 text-white focus:border-aeros-blue outline-none font-mono"
+                            />
+                        </div>
+                        <div className="flex flex-col">
+                            <label className="text-gray-400 mb-1.5">LINUX_USER (optional)</label>
                             <input
                                 type="text"
                                 value={runUser}
                                 onChange={(e) => setRunUser(e.target.value)}
-                                placeholder="Leave empty for default (root)"
+                                placeholder="Default (root)"
                                 className="bg-[#0a0a0a] border border-aeros-gray px-3 py-2 text-white focus:border-aeros-blue outline-none font-mono"
                             />
                         </div>
