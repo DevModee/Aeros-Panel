@@ -14,7 +14,9 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-app.set('trust proxy', 1);
+// Only trust X-Forwarded-* from a reverse proxy on the same host (Caddy, cloudflared).
+// The panel binds 0.0.0.0, so trusting any first hop lets clients spoof req.ip.
+app.set('trust proxy', 'loopback');
 
 app.use((_req, res, next) => {
     res.setHeader('X-Frame-Options', 'DENY');

@@ -119,12 +119,8 @@ export function getSessionTokenFromRequest(req: IncomingMessage): string | undef
 }
 
 function isSecureRequest(req: Request): boolean {
-    if (req.secure) return true;
-    const forwardedProto = req.headers['x-forwarded-proto'];
-    if (typeof forwardedProto === 'string') {
-        return forwardedProto.split(',')[0].trim().toLowerCase() === 'https';
-    }
-    return false;
+    // req.secure already honors X-Forwarded-Proto from trusted proxies only
+    return req.secure;
 }
 
 export function setSessionCookie(req: Request, res: Response, token: string, expiresAt: number): void {
