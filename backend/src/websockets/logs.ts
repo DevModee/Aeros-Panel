@@ -39,6 +39,11 @@ export function setupWebSocket(server: Server) {
             return;
         }
 
+        // Client may have disconnected during session lookup; spawning now would orphan journalctl -f
+        if (ws.readyState !== WebSocket.OPEN) {
+            return;
+        }
+
         const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
         const serviceName = url.searchParams.get('service');
 
