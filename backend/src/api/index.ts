@@ -2,7 +2,7 @@ import { Router } from 'express';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { getSystemMetrics } from '../system/sensors';
+import { getCpuSummary, getSystemMetrics } from '../system/sensors';
 import {
     startService,
     stopService,
@@ -588,38 +588,53 @@ apiRouter.post('/projects/:id/env', async (req, res) => {
     }
 });
 
+// Host facts rarely change, but os.networkInterfaces() and the sync fs calls block the event loop.
+const HOST_FACTS_TTL_MS = 30_000;
+let cachedHostFacts: { at: number; osName: string; ipv4: string; mac: string; storageTotal: number } | null = null;
+
+function readHostFacts() {
+    const now = Date.now();
+    if (cachedHostFacts && now - cachedHostFacts.at < HOST_FACTS_TTL_MS) {
+        return cachedHostFacts;
+    }
+
+    let osName = os.type();
+    try {
+        const osRelease = fs.readFileSync('/etc/os-release', 'utf8');
+        const match = osRelease.match(/PRETTY_NAME="([^"]+)"/);
+        if (match && match[1]) osName = match[1];
+    } catch {}
+
+    let ipv4 = 'UNKNOWN';
+    let mac = 'UNKNOWN';
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        const entries = interfaces[name];
+        if (!entries) continue;
+        for (const iface of entries) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                ipv4 = iface.address;
+                mac = iface.mac;
+                break;
+            }
+        }
+        if (ipv4 !== 'UNKNOWN') break;
+    }
+
+    let storageTotal = 0;
+    try {
+        const stats = fs.statfsSync('/');
+        storageTotal = stats.blocks * stats.bsize;
+    } catch {}
+
+    cachedHostFacts = { at: now, osName, ipv4, mac, storageTotal };
+    return cachedHostFacts;
+}
+
 apiRouter.get('/system/info', async (_req, res) => {
     try {
-        let osName = os.type();
-        try {
-            const osRelease = fs.readFileSync('/etc/os-release', 'utf8');
-            const match = osRelease.match(/PRETTY_NAME="([^"]+)"/);
-            if (match && match[1]) osName = match[1];
-        } catch {}
-
-        let ipv4 = 'UNKNOWN';
-        let mac = 'UNKNOWN';
-        const interfaces = os.networkInterfaces();
-        for (const name of Object.keys(interfaces)) {
-            const entries = interfaces[name];
-            if (!entries) continue;
-            for (const iface of entries) {
-                if (iface.family === 'IPv4' && !iface.internal) {
-                    ipv4 = iface.address;
-                    mac = iface.mac;
-                    break;
-                }
-            }
-            if (ipv4 !== 'UNKNOWN') break;
-        }
-
-        let storageTotal = 0;
-        try {
-            const stats = fs.statfsSync('/');
-            storageTotal = stats.blocks * stats.bsize;
-        } catch {}
-
-        const cpus = os.cpus();
+        const { osName, ipv4, mac, storageTotal } = readHostFacts();
+        const cpu = getCpuSummary();
         const panelPort = Number(process.env.PORT) || 3000;
         const remoteAccess = await getRemoteAccessInfo(panelPort);
         const info = {
@@ -627,8 +642,8 @@ apiRouter.get('/system/info', async (_req, res) => {
             os: osName,
             kernel: os.release(),
             uptime: os.uptime(),
-            cpu: cpus[0]?.model || 'Unknown CPU',
-            cores: cpus.length,
+            cpu: cpu.model,
+            cores: cpu.cores,
             memory: os.totalmem(),
             ipv4,
             mac,

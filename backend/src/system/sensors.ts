@@ -1,34 +1,55 @@
 import { promises as fs } from 'fs';
 import * as os from 'os';
 
-let previousCpu = processCpuTimes();
+// os.cpus() is synchronous and was the top CPU cost under load (two calls per request).
+// Call it once per sample and serve concurrent callers from a short lazy cache.
+const METRICS_TTL_MS = 1000;
+let cachedMetrics: { at: number; value: ReturnType<typeof collectSystemMetrics> } | null = null;
+let previousCpu = processCpuTimes(os.cpus());
+let cpuSummary: { model: string; cores: number } | null = null;
 
-function processCpuTimes() {
-    const cpus = os.cpus();
+function processCpuTimes(cpus: os.CpuInfo[]) {
     let idle = 0;
     let total = 0;
-    
+
     for (const cpu of cpus) {
         for (const type in cpu.times) {
             total += cpu.times[type as keyof typeof cpu.times];
         }
         idle += cpu.times.idle;
     }
-    
+
     return { idle, total };
 }
 
-export async function getSystemMetrics() {
+export function getCpuSummary(): { model: string; cores: number } {
+    if (!cpuSummary) {
+        const cpus = os.cpus();
+        cpuSummary = { model: cpus[0]?.model || 'Unknown CPU', cores: cpus.length };
+    }
+    return cpuSummary;
+}
+
+export function getSystemMetrics() {
+    const now = Date.now();
+    if (!cachedMetrics || now - cachedMetrics.at >= METRICS_TTL_MS) {
+        cachedMetrics = { at: now, value: collectSystemMetrics() };
+    }
+    return cachedMetrics.value;
+}
+
+async function collectSystemMetrics() {
     const memoryTotal = os.totalmem();
     const memoryFree = os.freemem();
     const memoryUsed = memoryTotal - memoryFree;
-    
-    const currentCpu = processCpuTimes();
+
+    const cpus = os.cpus();
+    const currentCpu = processCpuTimes(cpus);
     const idleDiff = currentCpu.idle - previousCpu.idle;
     const totalDiff = currentCpu.total - previousCpu.total;
     const cpuUsage = totalDiff === 0 ? 0 : 100 - Math.floor(100 * idleDiff / totalDiff);
     previousCpu = currentCpu;
-    
+
     let batteryPercentage = null;
     let batteryStatus = 'UNKNOWN';
     try {
@@ -67,7 +88,7 @@ export async function getSystemMetrics() {
     return {
         cpu: {
             usage: cpuUsage,
-            cores: os.cpus().length
+            cores: cpus.length
         },
         memory: {
             total: memoryTotal,
