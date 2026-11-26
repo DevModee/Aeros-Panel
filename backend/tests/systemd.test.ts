@@ -3,7 +3,9 @@ import { describe, it } from 'node:test';
 import {
     assertManageableServiceName,
     assertValidServiceName,
-    isReservedServiceName
+    getServiceSnapshot,
+    isReservedServiceName,
+    parseServiceSnapshot
 } from '../src/system/systemd';
 
 describe('isReservedServiceName', () => {
@@ -32,6 +34,40 @@ describe('isReservedServiceName', () => {
         for (const name of ['my-api', 'DiscordBot', 'app_v2', 'web.frontend']) {
             assert.equal(isReservedServiceName(name), false, `expected ${name} to be allowed`);
         }
+    });
+});
+
+describe('service metrics', () => {
+    it('reads memory bytes and cumulative CPU nanoseconds for an active unit', () => {
+        assert.deepEqual(parseServiceSnapshot('CPUUsageNSec=789\nActiveState=active\nMemoryCurrent=123\n'), {
+            status: 'active', metrics: { memoryBytes: 123, cpuUsageNSec: 789 }
+        });
+    });
+
+    it('handles missing counters and preserves zero values', () => {
+        assert.deepEqual(parseServiceSnapshot('ActiveState=active\nMemoryCurrent=0\nCPUUsageNSec=[not set]\n'), {
+            status: 'active', metrics: { memoryBytes: 0, cpuUsageNSec: null }
+        });
+        assert.deepEqual(parseServiceSnapshot('ActiveState=active\nMemoryCurrent=18446744073709551615\n'), {
+            status: 'active', metrics: null
+        });
+    });
+
+    it('ignores stale counters for an inactive or failed unit', () => {
+        for (const state of ['inactive', 'failed']) {
+            assert.deepEqual(parseServiceSnapshot(`ActiveState=${state}\nCPUUsageNSec=789\n`), {
+                status: 'inactive', metrics: null
+            });
+        }
+    });
+
+    it('validates the unit before attempting to read metrics', async () => {
+        await assert.rejects(getServiceSnapshot('-flag'), /Invalid systemd service name/);
+        await assert.rejects(getServiceSnapshot('ssh'), /reserved/);
+    });
+
+    it('returns unavailable metrics outside Linux', { skip: process.platform === 'linux' }, async () => {
+        assert.deepEqual(await getServiceSnapshot('my-app'), { status: 'inactive', metrics: null });
     });
 });
 

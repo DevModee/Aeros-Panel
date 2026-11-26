@@ -84,6 +84,50 @@ export async function getServiceStatus(serviceName: string): Promise<string> {
     }
 }
 
+interface ServiceSnapshot {
+    status: string;
+    metrics: { memoryBytes: number | null; cpuUsageNSec: number | null } | null;
+}
+
+function readCounter(value: string | undefined): number | null {
+    if (!value || !/^\d+$/.test(value) || value === '18446744073709551615') return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+}
+
+export function parseServiceSnapshot(output: string): ServiceSnapshot {
+    const properties = new Map(output.trim().split(/\r?\n/).map((line) => {
+        const separator = line.indexOf('=');
+        return [line.slice(0, separator), line.slice(separator + 1)];
+    }));
+    const state = properties.get('ActiveState');
+    if (state !== 'active' && state !== 'reloading' && state !== 'refreshing') {
+        return { status: 'inactive', metrics: null };
+    }
+
+    const memoryBytes = readCounter(properties.get('MemoryCurrent'));
+    const cpuUsageNSec = readCounter(properties.get('CPUUsageNSec'));
+    return {
+        status: state,
+        metrics: memoryBytes === null && cpuUsageNSec === null ? null : { memoryBytes, cpuUsageNSec }
+    };
+}
+
+export async function getServiceSnapshot(serviceName: string): Promise<ServiceSnapshot> {
+    assertManageableServiceName(serviceName);
+    if (process.platform === 'linux') {
+        try {
+            const { stdout } = await runSystemctl([
+                'show', '--property=ActiveState,MemoryCurrent,CPUUsageNSec', '--', serviceName
+            ]);
+            return parseServiceSnapshot(stdout);
+        } catch {
+            // The service manager or unit may be unavailable.
+        }
+    }
+    return { status: 'inactive', metrics: null };
+}
+
 export async function writeSystemdUnit(
     serviceName: string,
     unitContent: string
