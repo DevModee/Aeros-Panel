@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import { getCpuSummary, getSystemMetrics } from '../system/sensors';
 import {
+    assertManageableServiceName,
     startService,
     stopService,
     restartService,
@@ -36,8 +37,17 @@ import {
     validateBackupSchedule,
     writeBackupUnits
 } from '../system/backups';
+import {
+    ALERTS_SUPPORTED,
+    applyAlertConfiguration,
+    readAlertConfiguration,
+    sendAlert,
+    setProjectFailureAlert,
+    validateAlertProvider,
+    validateAlertWebhook
+} from '../system/alerts';
 import { db } from '../database/db';
-import { getPublicStatusConfig, updatePublicStatusConfig } from '../database/settings';
+import { getAlertSettings, getPublicStatusConfig, updateAlertSettings, updatePublicStatusConfig } from '../database/settings';
 import { authRouter } from './auth';
 import { publicStatusRouter, invalidatePublicStatusCache } from './publicStatus';
 import { webhooksRouter } from './webhooks';
@@ -46,6 +56,23 @@ import { requireAuth } from '../auth/session';
 import { requireSameOriginForMutations } from '../auth/origin';
 
 export const apiRouter = Router();
+
+let pendingAlertChanges: Promise<unknown> = Promise.resolve();
+
+function withAlertChanges<T>(change: () => Promise<T>): Promise<T> {
+    const next = pendingAlertChanges.then(change);
+    pendingAlertChanges = next.catch(() => {});
+    return next;
+}
+
+function canConfigureProjectAlerts(serviceName: string): boolean {
+    try {
+        assertManageableServiceName(serviceName);
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 // CSRF defense-in-depth for all state-changing API requests
 apiRouter.use(requireSameOriginForMutations);
@@ -83,6 +110,72 @@ apiRouter.put('/settings/public-status', async (req, res) => {
         res.json(updated);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+apiRouter.get('/settings/alerts', async (_req, res) => {
+    try {
+        const settings = await getAlertSettings();
+        const configuration = await readAlertConfiguration();
+        res.json({ ...settings, supported: ALERTS_SUPPORTED, configured: Boolean(configuration) });
+    } catch {
+        res.status(500).json({ error: 'Could not read alert settings.' });
+    }
+});
+
+apiRouter.put('/settings/alerts', async (req, res) => {
+    if (!ALERTS_SUPPORTED) return res.status(409).json({ error: 'Service alerts require Linux with systemd.' });
+    const { enabled, provider: requestedProvider, webhookUrl } = req.body ?? {};
+    if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'Set enabled to true or false.' });
+
+    let provider: ReturnType<typeof validateAlertProvider>;
+    let newUrl: string | undefined;
+    try {
+        provider = validateAlertProvider(requestedProvider);
+        if (webhookUrl !== undefined) newUrl = validateAlertWebhook(webhookUrl, provider).href;
+    } catch (error: any) {
+        return res.status(400).json({ error: error.message });
+    }
+
+    try {
+        const updated = await withAlertChanges(async () => {
+            const previous = await readAlertConfiguration();
+            const url = newUrl ?? (previous?.provider === provider ? previous.webhookUrl : undefined);
+            if ((enabled || previous) && !url) return null;
+
+            const settings = { enabled, provider };
+            const next = url ? { ...settings, webhookUrl: url } : null;
+            const services: string[] = (await db('projects').pluck('service_name')).filter(canConfigureProjectAlerts);
+            try {
+                await applyAlertConfiguration(next, services);
+                await updateAlertSettings(settings);
+            } catch (error) {
+                await applyAlertConfiguration(previous, services).catch(() => {});
+                throw error;
+            }
+            return { ...settings, supported: true, configured: Boolean(next) };
+        });
+        if (!updated) return res.status(400).json({ error: 'Enter a webhook URL for the selected provider.' });
+        res.json(updated);
+    } catch {
+        res.status(500).json({ error: 'Could not apply alert settings.' });
+    }
+});
+
+apiRouter.post('/settings/alerts/test', async (_req, res) => {
+    if (!ALERTS_SUPPORTED) return res.status(409).json({ error: 'Service alerts require Linux with systemd.' });
+    let configuration: Awaited<ReturnType<typeof readAlertConfiguration>>;
+    try {
+        configuration = await readAlertConfiguration();
+    } catch {
+        return res.status(500).json({ error: 'Could not read alert settings.' });
+    }
+    if (!configuration) return res.status(409).json({ error: 'Save a webhook URL before testing alerts.' });
+    try {
+        await sendAlert(configuration);
+        res.json({ ok: true });
+    } catch (error: any) {
+        res.status(502).json({ error: error.message });
     }
 });
 
@@ -244,6 +337,18 @@ apiRouter.post('/projects', async (req, res) => {
             unitResult = await writeSystemdUnit(config.serviceName, unitContent);
         }
 
+        if (ALERTS_SUPPORTED) {
+            try {
+                await withAlertChanges(async () => {
+                    const { enabled } = await getAlertSettings();
+                    if (enabled) await setProjectFailureAlert(config.serviceName, true);
+                });
+            } catch {
+                unitResult.warning = [unitResult.warning, 'Could not install failure alerts for this service.']
+                    .filter(Boolean).join(' ');
+            }
+        }
+
         res.status(201).json({
             id,
             success: true,
@@ -259,19 +364,26 @@ apiRouter.post('/projects', async (req, res) => {
 
 apiRouter.delete('/projects/:id', async (req, res) => {
     try {
-        const project = await db('projects').where('id', req.params.id).first();
-        if (!project) return res.status(404).json({ error: 'Not found' });
+        const deleted = await withAlertChanges(async () => {
+            const project = await db('projects').where('id', req.params.id).first();
+            if (!project) return false;
 
-        if (req.query.removeUnit === '1') {
-            await removeSystemdUnit(project.service_name);
-        }
+            if (ALERTS_SUPPORTED && canConfigureProjectAlerts(project.service_name)) {
+                await setProjectFailureAlert(project.service_name, false);
+            }
+            if (req.query.removeUnit === '1') {
+                await removeSystemdUnit(project.service_name);
+            }
 
-        if (project.domain) {
-            await removeCaddyRoute(project.service_name).catch(() => {});
-            invalidateRemoteAccessInfo();
-        }
+            if (project.domain) {
+                await removeCaddyRoute(project.service_name).catch(() => {});
+                invalidateRemoteAccessInfo();
+            }
 
-        await db('projects').where('id', req.params.id).del();
+            await db('projects').where('id', req.params.id).del();
+            return true;
+        });
+        if (!deleted) return res.status(404).json({ error: 'Not found' });
         res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ error: error.message });

@@ -1,4 +1,5 @@
 import { db } from './db';
+import type { AlertProvider } from '../system/alerts';
 
 export interface PublicStatusConfig {
     enabled: boolean;
@@ -7,6 +8,12 @@ export interface PublicStatusConfig {
 
 const KEY_ENABLED = 'public_status_enabled';
 const KEY_TOKEN = 'public_status_token';
+const KEY_ALERTS = 'service_alerts';
+
+export interface AlertSettings {
+    enabled: boolean;
+    provider: AlertProvider;
+}
 
 export async function getSetting(key: string, defaultValue = ''): Promise<string> {
     const row = await db('settings').where('key', key).first();
@@ -42,4 +49,13 @@ export async function updatePublicStatusConfig(
         await setSetting(KEY_TOKEN, input.token.trim());
     }
     return getPublicStatusConfig();
+}
+
+export async function getAlertSettings(): Promise<AlertSettings> {
+    const saved = await getSetting(KEY_ALERTS);
+    return saved ? JSON.parse(saved) : { enabled: false, provider: 'json' };
+}
+
+export async function updateAlertSettings(settings: AlertSettings): Promise<void> {
+    await setSetting(KEY_ALERTS, JSON.stringify({ enabled: settings.enabled, provider: settings.provider }));
 }

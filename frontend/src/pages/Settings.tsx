@@ -1,10 +1,19 @@
 import { useEffect, useState, useCallback, type FormEvent } from 'react';
-import { Radio, Save, Copy, Check, KeyRound, RefreshCw, Play, Archive, Plus, Trash2, Power } from 'lucide-react';
+import { Radio, Save, Copy, Check, KeyRound, RefreshCw, Play, Archive, Plus, Trash2, Power, Bell } from 'lucide-react';
 import { apiFetch, ApiError } from '../lib/api';
 
 interface PublicStatusConfig {
     enabled: boolean;
     token: string;
+}
+
+type AlertProvider = 'json' | 'discord' | 'telegram' | 'ntfy';
+
+interface AlertSettings {
+    enabled: boolean;
+    provider: AlertProvider;
+    configured: boolean;
+    supported: boolean;
 }
 
 interface BackupJob {
@@ -32,6 +41,13 @@ export function Settings() {
     const [copied, setCopied] = useState(false);
     const [testOutput, setTestOutput] = useState<string | null>(null);
     const [testing, setTesting] = useState(false);
+
+    const [alertSettings, setAlertSettings] = useState<AlertSettings | null>(null);
+    const [alertEnabled, setAlertEnabled] = useState(false);
+    const [alertProvider, setAlertProvider] = useState<AlertProvider>('json');
+    const [alertUrl, setAlertUrl] = useState('');
+    const [alertMessage, setAlertMessage] = useState<{ ok: boolean; text: string } | null>(null);
+    const [alertAction, setAlertAction] = useState<'save' | 'test' | null>(null);
 
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -70,6 +86,17 @@ export function Settings() {
                 if (active) setBackupJobs(list);
             })
             .catch((error) => console.error(error));
+
+        apiFetch<AlertSettings>('/api/settings/alerts')
+            .then((settings) => {
+                if (!active) return;
+                setAlertSettings(settings);
+                setAlertEnabled(settings.enabled);
+                setAlertProvider(settings.provider);
+            })
+            .catch(() => {
+                if (active) setAlertMessage({ ok: false, text: 'Could not load failure alerts.' });
+            });
 
         return () => {
             active = false;
@@ -130,6 +157,47 @@ export function Settings() {
             setTestOutput(`ERROR: ${err?.message || 'Request failed'}`);
         } finally {
             setTesting(false);
+        }
+    };
+
+    const canEditAlerts = Boolean(alertSettings?.supported && !alertAction);
+    const canReuseAlertUrl = Boolean(alertSettings?.configured && alertSettings.provider === alertProvider);
+
+    const handleSaveAlerts = async (event: FormEvent) => {
+        event.preventDefault();
+        if (!canEditAlerts) return;
+        setAlertAction('save');
+        setAlertMessage(null);
+        try {
+            const updated = await apiFetch<AlertSettings>('/api/settings/alerts', {
+                method: 'PUT',
+                body: JSON.stringify({
+                    enabled: alertEnabled,
+                    provider: alertProvider,
+                    webhookUrl: alertUrl || undefined
+                })
+            });
+            setAlertSettings(updated);
+            setAlertUrl('');
+            setAlertMessage({ ok: true, text: updated.enabled ? 'Failure alerts enabled.' : 'Failure alerts disabled.' });
+        } catch (error) {
+            setAlertMessage({ ok: false, text: error instanceof ApiError ? error.message : 'Could not save failure alerts.' });
+        } finally {
+            setAlertAction(null);
+        }
+    };
+
+    const handleTestAlerts = async () => {
+        if (!canEditAlerts || !canReuseAlertUrl || alertUrl) return;
+        setAlertAction('test');
+        setAlertMessage(null);
+        try {
+            await apiFetch('/api/settings/alerts/test', { method: 'POST' });
+            setAlertMessage({ ok: true, text: 'Test alert sent.' });
+        } catch (error) {
+            setAlertMessage({ ok: false, text: error instanceof ApiError ? error.message : 'Could not send the test alert.' });
+        } finally {
+            setAlertAction(null);
         }
     };
 
@@ -358,6 +426,93 @@ export function Settings() {
                             >
                                 <Save size={15} className="mr-2" />
                                 {savingStatus ? 'SAVING...' : 'SAVE_STATUS_CONFIG'}
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <form onSubmit={handleSaveAlerts} className="terminal-card border-aeros-gray !p-8 bg-[#050505]">
+                    <div className="flex items-center justify-between mb-6">
+                        <div className="text-aeros-blue flex items-center font-bold text-lg">
+                            <Bell className="mr-4 text-aeros-blue" size={22} />
+                            SYSTEMD_FAILURE_ALERTS
+                        </div>
+                        <button
+                            type="button"
+                            aria-pressed={alertEnabled}
+                            onClick={() => setAlertEnabled((current) => !current)}
+                            disabled={!canEditAlerts}
+                            className={`px-3 py-1.5 text-xs font-mono border cursor-pointer transition-colors disabled:opacity-50 ${
+                                alertEnabled
+                                    ? 'border-green-500 bg-green-950/40 text-green-400'
+                                    : 'border-aeros-gray bg-black text-gray-400 hover:border-aeros-blue'
+                            }`}
+                        >
+                            {alertEnabled ? 'STATUS: ENABLED' : 'STATUS: DISABLED'}
+                        </button>
+                    </div>
+
+                    <p className="text-xs text-gray-400 mb-5 leading-relaxed">
+                        {alertSettings?.supported === false
+                            ? 'Failure alerts require Linux with systemd.'
+                            : 'Send a webhook when a managed systemd service enters the failed state.'}
+                    </p>
+
+                    <div className="space-y-4 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <label className="flex flex-col gap-1.5 text-gray-400">
+                                PROVIDER
+                                <select
+                                    value={alertProvider}
+                                    onChange={(event) => setAlertProvider(event.target.value as AlertProvider)}
+                                    disabled={!canEditAlerts}
+                                    className="bg-[#0a0a0a] border border-aeros-gray px-3 py-2 text-white focus:border-aeros-blue outline-none font-mono"
+                                >
+                                    <option value="json">JSON webhook</option>
+                                    <option value="discord">Discord</option>
+                                    <option value="telegram">Telegram</option>
+                                    <option value="ntfy">ntfy</option>
+                                </select>
+                            </label>
+                            <label className="flex flex-col gap-1.5 text-gray-400 sm:col-span-2">
+                                WEBHOOK_URL
+                                <input
+                                    type="password"
+                                    autoComplete="off"
+                                    maxLength={4096}
+                                    value={alertUrl}
+                                    onChange={(event) => setAlertUrl(event.target.value)}
+                                    disabled={!canEditAlerts}
+                                    required={!canReuseAlertUrl && (alertEnabled || Boolean(alertSettings?.configured))}
+                                    placeholder={canReuseAlertUrl ? 'Saved URL. Enter a new URL to replace it.' : 'https://...'}
+                                    className="bg-[#0a0a0a] border border-aeros-gray px-3 py-2 text-white focus:border-aeros-blue outline-none font-mono"
+                                />
+                                {alertProvider === 'telegram' && <span>Use the sendMessage URL with a chat_id query parameter.</span>}
+                            </label>
+                        </div>
+
+                        {alertMessage && (
+                            <div role="status" className={alertMessage.ok ? 'text-aeros-blue' : 'text-red-400'}>{alertMessage.text}</div>
+                        )}
+
+                        <div className="pt-3 border-t border-aeros-gray flex flex-wrap gap-2">
+                            <button
+                                type="submit"
+                                disabled={!canEditAlerts}
+                                className="px-5 py-2 border border-aeros-blue text-aeros-blue bg-transparent hover:bg-aeros-blue hover:text-black cursor-pointer font-bold flex items-center disabled:opacity-50"
+                            >
+                                <Save size={15} className="mr-2" />
+                                {alertAction === 'save' ? 'SAVING...' : 'SAVE_ALERT_CONFIG'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleTestAlerts}
+                                disabled={!canEditAlerts || !canReuseAlertUrl || Boolean(alertUrl)}
+                                title="Send a test to the saved webhook"
+                                className="px-3 py-2 border border-aeros-gray text-aeros-purple hover:border-aeros-purple bg-transparent cursor-pointer flex items-center disabled:opacity-50"
+                            >
+                                <Play size={13} className="mr-1" />
+                                {alertAction === 'test' ? 'TESTING...' : 'TEST'}
                             </button>
                         </div>
                     </div>
