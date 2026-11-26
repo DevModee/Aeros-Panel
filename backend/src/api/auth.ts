@@ -119,16 +119,18 @@ authRouter.post('/login', async (req, res) => {
             return;
         }
 
+        // Count the attempt before any await. Recording it only after the lookup and scrypt let a
+        // concurrent burst pass the check above all at once and skip the limit entirely.
+        recordFailedLogin(ip);
+
         const user = await db('users').where('username', username).first();
         if (!user) {
-            recordFailedLogin(ip);
             res.status(401).json({ error: 'Invalid credentials' });
             return;
         }
 
         const valid = await verifyPassword(password, user.password);
         if (!valid) {
-            recordFailedLogin(ip);
             res.status(401).json({ error: 'Invalid credentials' });
             return;
         }
