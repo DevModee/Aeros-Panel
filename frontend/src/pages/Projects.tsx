@@ -26,6 +26,7 @@ interface Project {
     repository: string | null;
     branch: string;
     status: string;
+    metrics?: { memoryBytes: number | null; cpuUsageNSec: number | null } | null;
     autostart: number;
     template?: string;
     work_dir?: string | null;
@@ -360,9 +361,21 @@ export function Projects() {
                             >
                                 <div className="flex justify-between items-center mb-2 font-mono">
                                     <span className="font-bold text-white">{p.name}</span>
-                                    <span className={`text-xs px-2 py-1 ${p.status === 'active' ? 'bg-green-900 text-green-400' : 'bg-red-900 text-red-400'}`}>
-                                        {p.status.toUpperCase()}
-                                    </span>
+                                    <div className="flex flex-wrap justify-end items-center gap-x-2 gap-y-1">
+                                        {p.metrics?.memoryBytes != null && (
+                                            <span className="text-[10px] text-gray-400 whitespace-nowrap" title="Current service memory">
+                                                {(p.metrics.memoryBytes / 1024 ** 2).toFixed(1)} MiB RAM
+                                            </span>
+                                        )}
+                                        {p.metrics?.cpuUsageNSec != null && (
+                                            <span className="text-[10px] text-gray-400 whitespace-nowrap" title="Cumulative service CPU time">
+                                                {(p.metrics.cpuUsageNSec / 1e9).toFixed(1)}s CPU
+                                            </span>
+                                        )}
+                                        <span className={`text-xs px-2 py-1 ${p.status === 'active' ? 'bg-green-900 text-green-400' : 'bg-red-900 text-red-400'}`}>
+                                            {p.status.toUpperCase()}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div className="text-xs text-gray-400 flex justify-between items-center font-mono">
                                     <span>{p.service_name}</span>

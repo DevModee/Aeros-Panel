@@ -9,6 +9,7 @@ import {
     restartService,
     enableService,
     disableService,
+    getServiceSnapshot,
     getServiceStatus,
     writeSystemdUnit,
     removeSystemdUnit
@@ -152,12 +153,15 @@ apiRouter.get('/projects', async (_req, res) => {
         );
 
         const projectsWithStatus = await Promise.all(projects.map(async (p) => {
-            const status = await getServiceStatus(p.service_name);
+            const snapshot = await getServiceSnapshot(p.service_name).catch(async () => ({
+                status: await getServiceStatus(p.service_name),
+                metrics: null
+            }));
             const { webhook_secret, ...safeProject } = p;
             return {
                 ...safeProject,
                 has_webhook: Boolean(webhook_secret),
-                status,
+                ...snapshot,
                 deploying: isDeployRunning(p.service_name)
             };
         }));
