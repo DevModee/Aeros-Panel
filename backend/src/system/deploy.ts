@@ -1,7 +1,8 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { spawn } from 'child_process';
+import { execFile, spawn } from 'child_process';
+import { promisify } from 'util';
 import { db } from '../database/db';
 import { assertManageableServiceName, restartService } from './systemd';
 import { validateGitBranch, validateRepositoryUrl } from './git';
@@ -17,8 +18,11 @@ export interface DeployableProject {
     template: string | null;
     work_dir: string | null;
     build_cmd: string | null;
+    current_commit: string | null;
+    previous_commit: string | null;
 }
 
+const execFileAsync = promisify(execFile);
 const activeDeploys = new Set<string>();
 const LOCK_FILES = [
     'package-lock.json',
@@ -31,6 +35,21 @@ const LOCK_FILES = [
 
 export function isDeployRunning(serviceName: string): boolean {
     return activeDeploys.has(serviceName);
+}
+
+export function validateGitCommit(commit: unknown): string {
+    if (typeof commit !== 'string' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(commit)) {
+        throw new Error('Invalid Git commit SHA.');
+    }
+    return commit.toLowerCase();
+}
+
+async function readGitCommit(workDir: string, ref: string): Promise<string> {
+    const { stdout } = await execFileAsync('git', ['rev-parse', '--verify', '--end-of-options', ref], {
+        cwd: workDir,
+        timeout: 15000
+    });
+    return validateGitCommit(stdout.trim());
 }
 
 function hashFile(filePath: string): string | null {
@@ -103,7 +122,7 @@ function hasNodeBuildScript(workDir: string): boolean {
     }
 }
 
-export async function deployProject(project: DeployableProject): Promise<void> {
+export async function deployProject(project: DeployableProject, restart = restartService): Promise<void> {
     const serviceName = project.service_name;
     if (activeDeploys.has(serviceName)) {
         throw new Error('A deployment is already running for this service.');
@@ -121,6 +140,7 @@ export async function deployProject(project: DeployableProject): Promise<void> {
 
         let beforeHashes: Record<string, string | null> = {};
         let freshlyCloned = false;
+        let beforeCommit: string | null = null;
 
         if (!fs.existsSync(path.join(workDir, '.git'))) {
             if (project.repository) {
@@ -141,6 +161,7 @@ export async function deployProject(project: DeployableProject): Promise<void> {
                 broadcastServiceLog(serviceName, `[DEPLOY] No .git directory found in ${workDir}; skipping git pull.`);
             }
         } else {
+            beforeCommit = await readGitCommit(workDir, 'HEAD').catch(() => null);
             beforeHashes = snapshotHashes(workDir);
             await streamCommand('git', ['fetch', '--prune', 'origin', '--', branch], workDir, serviceName);
             await streamCommand('git', ['pull', '--ff-only', 'origin', '--', branch], workDir, serviceName);
@@ -204,13 +225,21 @@ export async function deployProject(project: DeployableProject): Promise<void> {
             await streamCommand('npm', ['run', 'build'], workDir, serviceName);
         }
 
+        const afterCommit = fs.existsSync(path.join(workDir, '.git'))
+            ? await readGitCommit(workDir, 'HEAD')
+            : null;
+
         // Restart systemd service
         broadcastServiceLog(serviceName, `[DEPLOY] Restarting systemd service "${serviceName}"...`);
-        await restartService(serviceName);
+        await restart(serviceName);
 
         await db('projects')
             .where('id', project.id)
-            .update({ last_deploy_at: new Date().toISOString() });
+            .update({
+                last_deploy_at: new Date().toISOString(),
+                current_commit: afterCommit,
+                previous_commit: getPreviousCommit(project, beforeCommit, afterCommit)
+            });
 
         const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1);
         broadcastServiceLog(serviceName, `[DEPLOY] Completed in ${elapsedSec}s. Service restarted.`);
@@ -219,4 +248,11 @@ export async function deployProject(project: DeployableProject): Promise<void> {
     } finally {
         activeDeploys.delete(serviceName);
     }
+}
+
+function getPreviousCommit(project: DeployableProject, before: string | null, after: string | null): string | null {
+    if (!after) return null;
+    if (project.current_commit === after) return project.previous_commit;
+    const previous = project.current_commit ?? before;
+    return previous === after ? null : previous;
 }

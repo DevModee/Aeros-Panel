@@ -24,6 +24,8 @@ async function ensureProjectColumns() {
         { name: 'memory_max', add: (t) => t.string('memory_max').nullable() },
         { name: 'cpu_quota', add: (t) => t.string('cpu_quota').nullable() },
         { name: 'last_deploy_at', add: (t) => t.string('last_deploy_at').nullable() },
+        { name: 'current_commit', add: (t) => t.string('current_commit').nullable() },
+        { name: 'previous_commit', add: (t) => t.string('previous_commit').nullable() },
         { name: 'webhook_secret', add: (t) => t.string('webhook_secret').nullable() },
         { name: 'domain', add: (t) => t.string('domain').nullable() },
         { name: 'port', add: (t) => t.integer('port').nullable() }
@@ -98,6 +100,8 @@ export async function initializeDatabase() {
             table.string('memory_max').nullable();
             table.string('cpu_quota').nullable();
             table.string('last_deploy_at').nullable();
+            table.string('current_commit').nullable();
+            table.string('previous_commit').nullable();
             table.string('webhook_secret').nullable();
             table.string('domain').nullable();
             table.integer('port').nullable();
