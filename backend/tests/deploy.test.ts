@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { it } from 'node:test';
@@ -25,7 +25,7 @@ it('validates full hexadecimal Git commit IDs', async () => {
 it('migrates legacy projects and records only successful deploys without losing the rollback point', async (t) => {
     const repo = mkdtempSync(path.join(process.cwd(), '.deploy-test-'));
     const { db, initializeDatabase } = await import('../src/database/db');
-    const { deployProject } = await import('../src/system/deploy');
+    const { deployProject, isDeployRunning, rollbackProject } = await import('../src/system/deploy');
     t.after(async () => {
         await db.destroy();
         rmSync(repo, { recursive: true, force: true });
@@ -51,10 +51,13 @@ it('migrates legacy projects and records only successful deploys without losing 
     git(repo, 'config', 'user.email', 'dev@example.test');
     git(repo, 'config', 'user.name', 'Test');
     git(repo, 'config', 'commit.gpgsign', 'false');
-    git(repo, 'commit', '--allow-empty', '-m', 'First');
+    writeFileSync(path.join(repo, 'app.txt'), 'first');
+    writeFileSync(path.join(repo, 'build.cjs'), "require('node:fs').copyFileSync('app.txt', 'built.txt');\n");
+    git(repo, 'add', 'app.txt', 'build.cjs');
+    git(repo, 'commit', '-m', 'First');
     const first = git(repo, 'rev-parse', 'HEAD');
     git(repo, 'clone', '.', workDir);
-    writeFileSync(path.join(repo, 'app.txt'), 'updated\n');
+    writeFileSync(path.join(repo, 'app.txt'), 'updated');
     git(repo, 'add', 'app.txt');
     git(repo, 'commit', '-m', 'Second');
     const second = git(repo, 'rev-parse', 'HEAD');
@@ -79,4 +82,38 @@ it('migrates legacy projects and records only successful deploys without losing 
     await deployProject(await project(), restart);
     assert.equal((await project()).current_commit, third);
     assert.equal((await project()).previous_commit, second);
+
+    writeFileSync(path.join(repo, 'app.txt'), 'latest');
+    git(repo, 'commit', '-am', 'Fourth');
+    const fourth = git(repo, 'rev-parse', 'HEAD');
+    await db('projects').where({ id }).update({ build_cmd: 'node build.cjs' });
+    await deployProject(await project(), restart);
+    assert.equal(readFileSync(path.join(workDir, 'built.txt'), 'utf8'), 'latest');
+
+    const beforeRollback = await project();
+    await rollbackProject({ ...beforeRollback, previous_commit: 'HEAD' }, restart);
+    assert.equal(git(workDir, 'rev-parse', 'HEAD'), fourth);
+
+    let restartAttempts = 0;
+    await rollbackProject(beforeRollback, async () => {
+        if (++restartAttempts === 1) throw new Error('Rollback restart failed');
+    });
+    assert.equal(restartAttempts, 2);
+    assert.equal(git(workDir, 'rev-parse', 'HEAD'), fourth);
+    assert.equal(readFileSync(path.join(workDir, 'built.txt'), 'utf8'), 'latest');
+    assert.deepEqual(await project(), beforeRollback);
+
+    await rollbackProject(beforeRollback, async (name) => {
+        await restart(name);
+        assert.equal(isDeployRunning(name), true);
+        await assert.rejects(deployProject(beforeRollback, restart), /already running/);
+    });
+    assert.equal(git(workDir, 'rev-parse', 'HEAD'), third);
+    assert.equal(readFileSync(path.join(workDir, 'built.txt'), 'utf8'), 'updated');
+    assert.equal((await project()).current_commit, third);
+    assert.equal((await project()).previous_commit, fourth);
+
+    await deployProject(await project(), restart);
+    assert.equal(git(workDir, 'rev-parse', 'HEAD'), fourth);
+    assert.equal((await project()).previous_commit, third);
 });

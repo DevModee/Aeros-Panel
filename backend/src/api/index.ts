@@ -22,7 +22,7 @@ import {
     type TemplateId
 } from '../system/templates';
 import { validateGitBranch, validateRepositoryUrl } from '../system/git';
-import { deployProject, isDeployRunning } from '../system/deploy';
+import { deployProject, getDeploymentAction, isDeployRunning, rollbackProject, validateGitCommit } from '../system/deploy';
 import { getRemoteAccessInfo, invalidateRemoteAccessInfo } from '../system/remote';
 import { applyCaddyRoute, detectCaddy, removeCaddyRoute } from '../system/caddy';
 import {
@@ -147,6 +147,8 @@ apiRouter.get('/projects', async (_req, res) => {
             'memory_max',
             'cpu_quota',
             'last_deploy_at',
+            'current_commit',
+            'previous_commit',
             'webhook_secret',
             'domain',
             'port'
@@ -162,7 +164,8 @@ apiRouter.get('/projects', async (_req, res) => {
                 ...safeProject,
                 has_webhook: Boolean(webhook_secret),
                 ...snapshot,
-                deploying: isDeployRunning(p.service_name)
+                deploying: isDeployRunning(p.service_name),
+                deployment_action: getDeploymentAction(p.service_name)
             };
         }));
 
@@ -321,6 +324,31 @@ apiRouter.post('/projects/:id/deploy', async (req, res) => {
         }
 
         void deployProject(project);
+        res.status(202).json({ started: true, service_name: project.service_name });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+apiRouter.post('/projects/:id/rollback', async (req, res) => {
+    try {
+        const project = await db('projects').where('id', req.params.id).first();
+        if (!project) return res.status(404).json({ error: 'Not found' });
+        if (isDeployRunning(project.service_name)) {
+            return res.status(409).json({ error: 'Deployment already in progress for this project' });
+        }
+
+        let target: string;
+        try {
+            target = validateGitCommit(project.previous_commit);
+        } catch {
+            return res.status(409).json({ error: 'No previous deploy commit is available' });
+        }
+        if (req.body?.commit !== undefined && req.body.commit !== target) {
+            return res.status(409).json({ error: 'The rollback commit changed. Refresh the project and try again.' });
+        }
+
+        void rollbackProject(project);
         res.status(202).json({ started: true, service_name: project.service_name });
     } catch (error: any) {
         res.status(500).json({ error: error.message });

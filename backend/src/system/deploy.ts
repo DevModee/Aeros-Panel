@@ -23,7 +23,7 @@ export interface DeployableProject {
 }
 
 const execFileAsync = promisify(execFile);
-const activeDeploys = new Set<string>();
+const activeDeploys = new Map<string, 'deploy' | 'rollback'>();
 const LOCK_FILES = [
     'package-lock.json',
     'pnpm-lock.yaml',
@@ -35,6 +35,10 @@ const LOCK_FILES = [
 
 export function isDeployRunning(serviceName: string): boolean {
     return activeDeploys.has(serviceName);
+}
+
+export function getDeploymentAction(serviceName: string): 'deploy' | 'rollback' | null {
+    return activeDeploys.get(serviceName) ?? null;
 }
 
 export function validateGitCommit(commit: unknown): string {
@@ -74,12 +78,14 @@ function streamCommand(
     command: string,
     args: string[],
     cwd: string,
-    serviceName: string,
+    log: (message: string) => void,
     useShell = false
 ): Promise<void> {
     return new Promise((resolve, reject) => {
-        const display = args.length > 0 ? `${command} ${args.join(' ')}` : command;
-        broadcastServiceLog(serviceName, `[DEPLOY] $ ${display}`);
+        const display = useShell ? 'configured build command'
+            : args[0] === 'clone' ? `${command} clone`
+            : [command, ...args].join(' ');
+        log(`$ ${display}`);
 
         const child = spawn(command, args, {
             cwd,
@@ -89,12 +95,12 @@ function streamCommand(
 
         child.stdout.on('data', (chunk) => {
             const text = chunk.toString().trimEnd();
-            if (text) broadcastServiceLog(serviceName, text);
+            if (text) log(`  ${text}`);
         });
 
         child.stderr.on('data', (chunk) => {
             const text = chunk.toString().trimEnd();
-            if (text) broadcastServiceLog(serviceName, text);
+            if (text) log(`  ${text}`);
         });
 
         child.on('error', (err) => {
@@ -128,15 +134,16 @@ export async function deployProject(project: DeployableProject, restart = restar
         throw new Error('A deployment is already running for this service.');
     }
 
-    activeDeploys.add(serviceName);
+    activeDeploys.set(serviceName, 'deploy');
+    const log = (message: string) => broadcastServiceLog(serviceName, `[DEPLOY] ${message}`);
     const startedAt = Date.now();
-
+    let result: string;
     try {
         assertManageableServiceName(serviceName);
         const workDir = validateWorkDir(project.work_dir || `/opt/${serviceName}`);
         const branch = validateGitBranch(project.branch || 'main');
 
-        broadcastServiceLog(serviceName, `[DEPLOY] Starting update for ${project.name} (${serviceName})...`);
+        log(`Starting update for ${project.name} (${serviceName})...`);
 
         let beforeHashes: Record<string, string | null> = {};
         let freshlyCloned = false;
@@ -147,90 +154,34 @@ export async function deployProject(project: DeployableProject, restart = restar
                 const repository = validateRepositoryUrl(project.repository);
                 const parentDir = path.dirname(workDir);
                 fs.mkdirSync(parentDir, { recursive: true });
-                broadcastServiceLog(serviceName, `[DEPLOY] Cloning ${repository} (branch: ${branch})...`);
+                log(`Cloning repository (branch: ${branch})...`);
                 await streamCommand(
                     'git',
                     ['clone', '--branch', branch, '--', repository, workDir],
                     parentDir,
-                    serviceName
+                    log
                 );
                 freshlyCloned = true;
             } else if (!fs.existsSync(workDir)) {
                 throw new Error(`Working directory "${workDir}" does not exist and no Git repository is configured.`);
             } else {
-                broadcastServiceLog(serviceName, `[DEPLOY] No .git directory found in ${workDir}; skipping git pull.`);
+                log(`No .git directory found in ${workDir}; skipping git pull.`);
             }
         } else {
             beforeCommit = await readGitCommit(workDir, 'HEAD').catch(() => null);
             beforeHashes = snapshotHashes(workDir);
-            await streamCommand('git', ['fetch', '--prune', 'origin', '--', branch], workDir, serviceName);
-            await streamCommand('git', ['pull', '--ff-only', 'origin', '--', branch], workDir, serviceName);
+            await streamCommand('git', ['fetch', '--prune', 'origin', '--', branch], workDir, log);
+            await streamCommand('git', ['pull', '--ff-only', 'origin', '--', branch], workDir, log);
         }
 
-        const afterHashes = snapshotHashes(workDir);
-
-        // Conditional Node.js dependency install
-        if (fs.existsSync(path.join(workDir, 'package.json'))) {
-            const nodeModulesMissing = !fs.existsSync(path.join(workDir, 'node_modules'));
-            const nodeLockChanged =
-                freshlyCloned ||
-                beforeHashes['package-lock.json'] !== afterHashes['package-lock.json'] ||
-                beforeHashes['pnpm-lock.yaml'] !== afterHashes['pnpm-lock.yaml'] ||
-                beforeHashes['yarn.lock'] !== afterHashes['yarn.lock'] ||
-                beforeHashes['package.json'] !== afterHashes['package.json'];
-
-            if (nodeModulesMissing || nodeLockChanged) {
-                broadcastServiceLog(serviceName, '[DEPLOY] Dependencies changed or missing; installing Node packages...');
-                if (fs.existsSync(path.join(workDir, 'pnpm-lock.yaml'))) {
-                    await streamCommand('pnpm', ['install', '--frozen-lockfile'], workDir, serviceName);
-                } else if (fs.existsSync(path.join(workDir, 'yarn.lock'))) {
-                    await streamCommand('yarn', ['install', '--frozen-lockfile'], workDir, serviceName);
-                } else if (fs.existsSync(path.join(workDir, 'package-lock.json'))) {
-                    await streamCommand('npm', ['ci'], workDir, serviceName);
-                } else {
-                    await streamCommand('npm', ['install'], workDir, serviceName);
-                }
-            } else {
-                broadcastServiceLog(serviceName, '[DEPLOY] Lockfile unchanged; skipping Node dependency install.');
-            }
-        }
-
-        // Conditional Python dependency install
-        if (fs.existsSync(path.join(workDir, 'requirements.txt'))) {
-            const venvPip = path.join(workDir, '.venv', 'bin', 'pip');
-            const pyLockChanged =
-                freshlyCloned ||
-                beforeHashes['requirements.txt'] !== afterHashes['requirements.txt'];
-
-            if (pyLockChanged) {
-                broadcastServiceLog(serviceName, '[DEPLOY] requirements.txt changed; installing Python packages...');
-                if (fs.existsSync(venvPip)) {
-                    await streamCommand(venvPip, ['install', '-r', 'requirements.txt'], workDir, serviceName);
-                } else {
-                    await streamCommand('pip3', ['install', '-r', 'requirements.txt'], workDir, serviceName);
-                }
-            }
-        }
-
-        // Conditional build step
-        const explicitBuild = project.build_cmd?.trim();
-        if (explicitBuild) {
-            broadcastServiceLog(serviceName, '[DEPLOY] Running configured build command...');
-            await streamCommand(explicitBuild, [], workDir, serviceName, true);
-        } else if (
-            (project.template === 'node' || project.template === 'static') &&
-            hasNodeBuildScript(workDir)
-        ) {
-            broadcastServiceLog(serviceName, '[DEPLOY] Detected build script in package.json; running npm run build...');
-            await streamCommand('npm', ['run', 'build'], workDir, serviceName);
-        }
+        const retrying = Boolean(project.current_commit && project.current_commit !== beforeCommit);
+        await prepareProject(project, workDir, beforeHashes, freshlyCloned || retrying, log);
 
         const afterCommit = fs.existsSync(path.join(workDir, '.git'))
             ? await readGitCommit(workDir, 'HEAD')
             : null;
 
-        // Restart systemd service
-        broadcastServiceLog(serviceName, `[DEPLOY] Restarting systemd service "${serviceName}"...`);
+        log(`Restarting systemd service "${serviceName}"...`);
         await restart(serviceName);
 
         await db('projects')
@@ -242,11 +193,120 @@ export async function deployProject(project: DeployableProject, restart = restar
             });
 
         const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1);
-        broadcastServiceLog(serviceName, `[DEPLOY] Completed in ${elapsedSec}s. Service restarted.`);
+        result = `Completed in ${elapsedSec}s. Service restarted.`;
     } catch (error: any) {
-        broadcastServiceLog(serviceName, `[DEPLOY] FAILED: ${error.message}`);
+        result = `FAILED: ${error.message}`;
     } finally {
         activeDeploys.delete(serviceName);
+    }
+    log(result);
+}
+
+export async function rollbackProject(project: DeployableProject, restart = restartService): Promise<void> {
+    const serviceName = project.service_name;
+    if (activeDeploys.has(serviceName)) {
+        throw new Error('A deployment is already running for this service.');
+    }
+
+    activeDeploys.set(serviceName, 'rollback');
+    const log = (message: string) => broadcastServiceLog(serviceName, `[ROLLBACK] ${message}`);
+    let result: string;
+    try {
+        assertManageableServiceName(serviceName);
+        const workDir = validateWorkDir(project.work_dir || `/opt/${serviceName}`);
+        const target = validateGitCommit(project.previous_commit);
+        if (!fs.existsSync(path.join(workDir, '.git'))) {
+            throw new Error('The project working directory is missing its Git checkout.');
+        }
+        if (await readGitCommit(workDir, `${target}^{commit}`) !== target) {
+            throw new Error('The rollback SHA does not identify a Git commit.');
+        }
+        const before = await readGitCommit(workDir, 'HEAD');
+        const lastDeployed = project.current_commit ? validateGitCommit(project.current_commit) : before;
+        const beforeHashes = snapshotHashes(workDir);
+        let restartAttempted = false;
+
+        log(`Rolling back ${project.name} to ${target.slice(0, 12)}...`);
+        try {
+            await streamCommand('git', ['reset', '--hard', target, '--'], workDir, log);
+            await prepareProject(project, workDir, beforeHashes, before !== lastDeployed, log);
+            if (await readGitCommit(workDir, 'HEAD') !== target) {
+                throw new Error('The build changed the rollback commit.');
+            }
+
+            log(`Restarting systemd service "${serviceName}"...`);
+            restartAttempted = true;
+            await restart(serviceName);
+
+            await db('projects').where('id', project.id).update({
+                last_deploy_at: new Date().toISOString(),
+                current_commit: target,
+                previous_commit: lastDeployed === target ? null : lastDeployed
+            });
+        } catch (error) {
+            log(`Restoring checkout ${before.slice(0, 12)} after rollback failure...`);
+            try {
+                const failedHashes = snapshotHashes(workDir);
+                await streamCommand('git', ['reset', '--hard', before, '--'], workDir, log);
+                await prepareProject(project, workDir, failedHashes, false, log);
+                if (restartAttempted) await restart(serviceName);
+            } catch (restoreError: any) {
+                log(`Could not restore the previous checkout or service: ${restoreError.message}`);
+            }
+            throw error;
+        }
+        result = 'Completed. Service restarted.';
+    } catch (error: any) {
+        result = `FAILED: ${error.message}`;
+    } finally {
+        activeDeploys.delete(serviceName);
+    }
+    log(result);
+}
+
+async function prepareProject(
+    project: DeployableProject,
+    workDir: string,
+    beforeHashes: Record<string, string | null>,
+    forceInstall: boolean,
+    log: (message: string) => void
+): Promise<void> {
+    const afterHashes = snapshotHashes(workDir);
+    const run = (command: string, args: string[], useShell = false) => streamCommand(command, args, workDir, log, useShell);
+
+    if (afterHashes['package.json'] !== null) {
+        const nodeModulesMissing = !fs.existsSync(path.join(workDir, 'node_modules'));
+        const nodeLockChanged = ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'package.json']
+            .some((file) => beforeHashes[file] !== afterHashes[file]);
+
+        if (nodeModulesMissing || nodeLockChanged || forceInstall) {
+            log('Dependencies changed or missing. Installing Node packages...');
+            if (afterHashes['pnpm-lock.yaml'] !== null) {
+                await run('pnpm', ['install', '--frozen-lockfile']);
+            } else if (afterHashes['yarn.lock'] !== null) {
+                await run('yarn', ['install', '--frozen-lockfile']);
+            } else if (afterHashes['package-lock.json'] !== null) {
+                await run('npm', ['ci']);
+            } else {
+                await run('npm', ['install']);
+            }
+        } else {
+            log('Lockfile unchanged. Skipping Node dependency install.');
+        }
+    }
+
+    if (afterHashes['requirements.txt'] !== null &&
+        (forceInstall || beforeHashes['requirements.txt'] !== afterHashes['requirements.txt'])) {
+        const venvPip = path.join(workDir, '.venv', 'bin', 'pip');
+        log('Installing Python packages from requirements.txt...');
+        await run(fs.existsSync(venvPip) ? venvPip : 'pip3', ['install', '-r', 'requirements.txt']);
+    }
+
+    const explicitBuild = project.build_cmd?.trim();
+    if (explicitBuild) {
+        await run(explicitBuild, [], true);
+    } else if ((project.template === 'node' || project.template === 'static') && hasNodeBuildScript(workDir)) {
+        await run('npm', ['run', 'build']);
     }
 }
 

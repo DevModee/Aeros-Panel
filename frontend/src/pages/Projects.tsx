@@ -32,7 +32,9 @@ interface Project {
     work_dir?: string | null;
     memory_max?: string | null;
     last_deploy_at?: string | null;
+    previous_commit?: string | null;
     deploying?: boolean;
+    deployment_action?: 'deploy' | 'rollback' | null;
     has_webhook?: boolean;
     domain?: string | null;
     port?: number | null;
@@ -55,21 +57,24 @@ export function Projects() {
     const [domainInput, setDomainInput] = useState('');
     const [portInput, setPortInput] = useState('3000');
     const [domainBusy, setDomainBusy] = useState(false);
-    const [deployingService, setDeployingService] = useState<string | null>(null);
+    const [deployment, setDeployment] = useState<{ service: string; action: 'deploy' | 'rollback' } | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const logsEndRef = useRef<HTMLDivElement>(null);
+    const projectRequest = useRef(0);
 
     const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
     const selectedServiceName = selectedProject?.service_name ?? null;
-    const isSelectedDeploying = Boolean(
-        selectedProject && (selectedProject.deploying || deployingService === selectedProject.service_name)
-    );
+    const deploymentAction = deployment && deployment.service === selectedServiceName
+        ? deployment.action
+        : selectedProject?.deployment_action;
+    const isSelectedDeploying = Boolean(deploymentAction || selectedProject?.deploying);
 
     const fetchProjects = useCallback(async () => {
+        const request = ++projectRequest.current;
         try {
             const data = await apiFetch<Project[]>('/api/projects');
-            setProjects(data);
+            if (request === projectRequest.current) setProjects(data);
         } catch (error) {
             console.error(error);
         }
@@ -100,11 +105,11 @@ export function Projects() {
         }
 
         const ws = new WebSocket(buildWsUrl({ service: selectedServiceName }));
+        ws.onopen = () => { void fetchProjects(); };
         ws.onmessage = (event) => {
             const msg = String(event.data);
             setLogs((prev) => [...prev, msg].slice(-300));
-            if (msg.includes('[DEPLOY] Completed') || msg.includes('[DEPLOY] FAILED')) {
-                setDeployingService((curr) => (curr === selectedServiceName ? null : curr));
+            if (/^\[(?:DEPLOY|ROLLBACK)\] (?:Completed|FAILED)/.test(msg)) {
                 void fetchProjects();
             }
         };
@@ -240,20 +245,27 @@ export function Projects() {
         }
     };
 
-    const handleDeploy = async () => {
+    const handleDeploy = async (action: 'deploy' | 'rollback') => {
         if (!selectedProject || isSelectedDeploying) return;
+        const target = selectedProject.previous_commit;
+        if (action === 'rollback' && (!target || !window.confirm(
+            `Roll back ${selectedProject.name} to ${target.slice(0, 12)}? Local changes to tracked files will be discarded.`
+        ))) return;
         setNotice(null);
         setIsEditingEnv(false);
-        setDeployingService(selectedProject.service_name);
+        setDeployment({ service: selectedProject.service_name, action });
 
         try {
-            await apiFetch(`/api/projects/${selectedProject.id}/deploy`, {
-                method: 'POST'
+            await apiFetch(`/api/projects/${selectedProject.id}/${action}`, {
+                method: 'POST',
+                body: action === 'rollback' ? JSON.stringify({ commit: target }) : undefined
             });
         } catch (error) {
-            setDeployingService(null);
-            const message = error instanceof ApiError ? error.message : 'Failed to start deployment.';
+            const message = error instanceof ApiError ? error.message : `Failed to start ${action}.`;
             setNotice(message);
+        } finally {
+            await fetchProjects();
+            setDeployment((current) => current?.service === selectedProject.service_name ? null : current);
         }
     };
 
@@ -406,13 +418,21 @@ export function Projects() {
                                 {!isEditingEnv ? (
                                     <div className="flex gap-1.5 items-center flex-wrap">
                                         <button
-                                            onClick={handleDeploy}
+                                            onClick={() => handleDeploy('deploy')}
                                             disabled={isSelectedDeploying}
                                             className="py-1.5 px-2.5 text-xs font-mono flex items-center bg-transparent border border-aeros-blue text-aeros-blue hover:bg-aeros-blue hover:text-black transition-colors cursor-pointer disabled:opacity-50"
                                             title="Git pull, build if needed, and restart service"
                                         >
                                             <Rocket size={13} className={`mr-1.5 ${isSelectedDeploying ? 'animate-pulse' : ''}`} />
-                                            {isSelectedDeploying ? 'DEPLOYING...' : 'DEPLOY'}
+                                            {deploymentAction === 'deploy' ? 'DEPLOYING...' : 'DEPLOY'}
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeploy('rollback')}
+                                            disabled={isSelectedDeploying || !selectedProject.previous_commit}
+                                            className="py-1.5 px-2.5 text-xs font-mono flex items-center bg-transparent border border-aeros-gray text-gray-300 hover:border-aeros-blue hover:text-aeros-blue transition-colors cursor-pointer disabled:opacity-50"
+                                            title={selectedProject.previous_commit ? 'Restore the previous deployed commit' : 'No previous deploy commit'}
+                                        >
+                                            {deploymentAction === 'rollback' ? 'ROLLING BACK...' : 'ROLLBACK'}
                                         </button>
                                         <button
                                             onClick={() => setLogs([])}
