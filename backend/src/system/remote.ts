@@ -182,7 +182,31 @@ async function detectCloudflareTunnel(panelPort: number): Promise<CloudflareTunn
     };
 }
 
-export async function getRemoteAccessInfo(panelPort: number): Promise<RemoteAccessInfo> {
+// Probing spawns up to four processes (tailscale, cloudflared, caddy, systemctl). Spawning blocks the
+// event loop, so concurrent /system/info requests starved every other route under load.
+// Cache lazily (no timer) and share one in-flight probe between callers.
+const REMOTE_INFO_TTL_MS = 30_000;
+let cachedRemoteInfo: { port: number; at: number; value: Promise<RemoteAccessInfo> } | null = null;
+
+export function invalidateRemoteAccessInfo(): void {
+    cachedRemoteInfo = null;
+}
+
+export function getRemoteAccessInfo(panelPort: number): Promise<RemoteAccessInfo> {
+    const now = Date.now();
+    if (cachedRemoteInfo && cachedRemoteInfo.port === panelPort && now - cachedRemoteInfo.at < REMOTE_INFO_TTL_MS) {
+        return cachedRemoteInfo.value;
+    }
+
+    const value = probeRemoteAccess(panelPort);
+    cachedRemoteInfo = { port: panelPort, at: now, value };
+    value.catch(() => {
+        if (cachedRemoteInfo?.value === value) cachedRemoteInfo = null;
+    });
+    return value;
+}
+
+async function probeRemoteAccess(panelPort: number): Promise<RemoteAccessInfo> {
     const [tailscale, cloudflare, caddy] = await Promise.all([
         detectTailscale(panelPort),
         detectCloudflareTunnel(panelPort),

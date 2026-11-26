@@ -22,7 +22,7 @@ import {
 } from '../system/templates';
 import { validateGitBranch, validateRepositoryUrl } from '../system/git';
 import { deployProject, isDeployRunning } from '../system/deploy';
-import { getRemoteAccessInfo } from '../system/remote';
+import { getRemoteAccessInfo, invalidateRemoteAccessInfo } from '../system/remote';
 import { applyCaddyRoute, detectCaddy, removeCaddyRoute } from '../system/caddy';
 import {
     BACKUP_DIR,
@@ -261,6 +261,7 @@ apiRouter.delete('/projects/:id', async (req, res) => {
 
         if (project.domain) {
             await removeCaddyRoute(project.service_name).catch(() => {});
+            invalidateRemoteAccessInfo();
         }
 
         await db('projects').where('id', req.params.id).del();
@@ -373,6 +374,7 @@ apiRouter.put('/projects/:id/domain', async (req, res) => {
         let applied: { domain: string; port: number; snippetPath: string };
         try {
             applied = await applyCaddyRoute(project.service_name, rawDomain, rawPort);
+            invalidateRemoteAccessInfo();
         } catch (error: any) {
             res.status(400).json({ error: error.message });
             return;
@@ -395,6 +397,7 @@ apiRouter.delete('/projects/:id/domain', async (req, res) => {
         if (!project) return res.status(404).json({ error: 'Not found' });
 
         await removeCaddyRoute(project.service_name);
+        invalidateRemoteAccessInfo();
         await db('projects').where('id', req.params.id).update({
             domain: null,
             port: null
